@@ -1,5 +1,6 @@
 // Copyright (c) 2012 Adrian Johnston.  All rights reserved.
 // See Copyright Notice in kdasm.h
+// Project Homepage: http://code.google.com/p/kdasm/
 
 #include "kdasm_assembler.h"
 
@@ -94,7 +95,8 @@ void KdasmTest::SpewAssemblerNodes( KdasmAssemblerNode* nodes, intptr_t depth )
     }
     if( nodes->HasSubnodes() )
     {
-        printf( "branch %s%s%d %d\n", nodes->GetSubnode( 0 ) ? "less ": "", nodes->GetSubnode( 1 ) ? "greater ": "", nodes->GetDistance(), nodes->GetNormal() );
+        printf( "branch %s%s%d %d\n", nodes->GetSubnode( 0 ) ? "less ": "", nodes->GetSubnode( 1 )
+			? "greater ": "", nodes->GetDistance(), nodes->GetNormal() );
         SpewAssemblerNodes( nodes->GetSubnode( 0 ), depth + 1 );
         SpewAssemblerNodes( nodes->GetSubnode( 1 ), depth + 1 );
     }
@@ -249,16 +251,16 @@ void KdasmTest::TestLeavesAtRoot( KdasmAssembler& kdasmAssembler, KdasmDisassemb
 void KdasmTest::TestRandom( KdasmAssembler& kdasmAssembler, KdasmDisassembler& kdasmDisassembler )
 {
     static const KdasmTestRandomSettings settings[] = {
-        // m_maxNodes,  m_maxLeaves,  m_distanceLength, m_percentSubnodes,  m_percentEmpty,  m_seed,  m_pageBits
-        {        2000,            7,                 1,                77,              30,  0x8a15,  KdasmEncodingHeader::PAGE_BITS_128B },
-        {        1000,          100,                 1,                70,              50,  0x61c6,  KdasmEncodingHeader::PAGE_BITS_64B  },
-        {         100,           10,                 4,                73,              20,  0x73e5,  KdasmEncodingHeader::PAGE_BITS_32B  },
+        // maxNodes, maxLeaves, distanceLength, percentSubnodes, percentEmpty,   seed, pageBits
+        {      2000,         7,              1,              77,           30, 0x8a15, KdasmEncodingHeader::PAGE_BITS_128B },
+        {      1000,       100,              1,              70,           50, 0x61c6, KdasmEncodingHeader::PAGE_BITS_64B  },
+        {       100,        10,              4,              73,           20, 0x73e5, KdasmEncodingHeader::PAGE_BITS_32B  },
 #if !defined(_DEBUG)
-        {     1000000,            8,                 1,                73,              20,  0x2152,  KdasmEncodingHeader::PAGE_BITS_64B  },
+        {   1000000,         8,              1,              73,           20, 0x2152, KdasmEncodingHeader::PAGE_BITS_64B  },
 #endif
-        {        1000,          100,                 2,                70,              50,  0x7988,  KdasmEncodingHeader::PAGE_BITS_64B  },
-        {        1000,          100,                 2,                70,              50,  0xe750,  KdasmEncodingHeader::PAGE_BITS_64B  },
-        {        1000,          100,                 2,                70,              50,  0x5a30,  KdasmEncodingHeader::PAGE_BITS_64B  },
+        {      1000,       100,              2,              70,           50, 0x7988, KdasmEncodingHeader::PAGE_BITS_64B  },
+        {      1000,       100,              2,              70,           50, 0xe750, KdasmEncodingHeader::PAGE_BITS_64B  },
+        {      1000,       100,              2,              70,           50, 0x5a30, KdasmEncodingHeader::PAGE_BITS_64B  },
     };
 
     for( int i=0; i < (sizeof settings / sizeof *settings); ++i )

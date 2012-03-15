@@ -2,6 +2,7 @@
 #define KDASM_ASSEMBLER_H
 // Copyright (c) 2012 Adrian Johnston.  All rights reserved.
 // See Copyright Notice in kdasm.h
+// Project Homepage: http://code.google.com/p/kdasm/
 
 #include <vector>
 #include <deque>

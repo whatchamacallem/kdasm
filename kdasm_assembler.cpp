@@ -1,5 +1,6 @@
 // Copyright (c) 2012 Adrian Johnston.  All rights reserved.
 // See Copyright Notice in kdasm.h
+// Project Homepage: http://code.google.com/p/kdasm/
 
 #include <algorithm>
 #include "kdasm_assembler.h"
@@ -764,7 +765,8 @@ bool KdasmAssemblerPagePacker::PackExtraData( intptr_t padding )
 
 bool KdasmAssemblerPagePacker::PackEncodingWords( void )
 {
-    // The initial tree roots are the non-leaf page roots.  References by OPCODE_LEAVES_FAR have no encoding.
+    // The initial tree roots are the non-leaf page roots.  References by
+	// OPCODE_LEAVES_FAR have no encoding.
     for( size_t i=0; i < m_pageTempData.size(); ++i )
     {
         KdasmAssemblerPageTempData* t = &m_pageTempData[i];
@@ -780,7 +782,7 @@ bool KdasmAssemblerPagePacker::PackEncodingWords( void )
     {
         PackingStats bestFit;
         bestFit.m_encodingWords = 0;
-        bestFit.m_internalJumps = 1; // No point encoding a single jump.  Just wastes space.
+        bestFit.m_internalJumps = 1; // No point adding a single jump.
 
         m_bestFitTreeRoot = -1;
         m_bestFitPageIndex = -1;
@@ -1268,9 +1270,12 @@ bool KdasmAssemblerPagePacker::ValidateAllocationMap( void )
         KdasmAssemblerPageTempData* t = m_allocationMap[i];
         if( t != NULL )
         {
-            if( t->m_indices.m_encodingWordIndex != i && t->m_indices.m_internalJumpIndex != i && t->m_indices.m_extraDataIndex != i )
+            if( t->m_indices.m_encodingWordIndex != i
+				&& t->m_indices.m_internalJumpIndex != i
+				&& t->m_indices.m_extraDataIndex != i )
             {
-                KdasmAssertDebug( t->m_indices.m_extraDataIndex <= i && ( t->m_indices.m_extraDataIndex + t->m_indices.m_extraDataSize ) > i );
+                KdasmAssertDebug( t->m_indices.m_extraDataIndex <= i \
+					&& ( t->m_indices.m_extraDataIndex + t->m_indices.m_extraDataSize ) > i );
             }
             else
             {
@@ -1390,11 +1395,9 @@ void KdasmAssembler::Assemble( KdasmAssemblerNode* root, KdasmEncodingHeader::Pa
     }
 
     m_pageAllocator.CompactAndFreePhysicalPages();
-
     BinPack();
 
     m_pageAllocator.CompactAndFreePhysicalPages();
-
     Encode( root, pageBits, result );
 
     root->AssembleFinish();

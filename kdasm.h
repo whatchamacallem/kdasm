@@ -2,6 +2,7 @@
 #define KDASM_H
 
 // Copyright (c) 2012 Adrian Johnston.  All rights reserved.
+// Project Homepage: http://code.google.com/p/kdasm/
 // 
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -28,6 +29,7 @@ typedef unsigned short KdasmU16;
 
 // ----------------------------------------------------------------------------
 // KdasmEncoding is an encoding of a cutting plane, a jump statement or leaves.
+// See Encoding Specification: http://goo.gl/3sU5N.
 
 class KdasmEncoding
 {
@@ -45,14 +47,14 @@ public:
         // With a distance length of 1 the value must fit in DISTANCE_IMMEDIATE_MASK and be less than DISTANCE_IMMEDIATE_MAX.
         DISTANCE_IMMEDIATE_MASK             = 0xfff0,
         DISTANCE_IMMEDIATE_MAX              = 0xffe0,
-        // Due to quantization, a cutting plane has this width.
+        // Due to quantization, an immediate cutting plane has this width.
         DISTANCE_IMMEDIATE_PLANE_WIDTH      = 0x0010,
-        // With a distance length greater than 1 this is the max value of the first KdasmU16.
+        // With a distance length greater than 1 this is the max value of the first word.
         DISTANCE_PREFIX_MAX                 = 0x001f,
         LEAF_WORD_LENGTH_MAX                = 0x001f,
         TREE_INDEX_MAX                      = 0x001f,
         IMMEDIATE_OFFSET_MAX                = 0x03ff,   // Max absolute value.  Negative values allowed.
-        LEAF_COUNT_OVERFLOW                 = 0xffff,    // An embedded header in the leaf data is required beyond this.
+        LEAF_COUNT_OVERFLOW                 = 0xffff,   // An embedded header in the leaf data is required beyond this.
         PAD_VALUE                           = 0xcccc    // Impossible x axis cut with both stop bits set.
     };
 
