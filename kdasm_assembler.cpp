@@ -6,6 +6,7 @@
 
 // Enables an excessive level of validation that is useful during development
 // to catch problems close to where they occur.
+
 //#define KDASM_PARANOIA
 
 // ----------------------------------------------------------------------------
@@ -23,15 +24,13 @@ bool KdasmAssertFail( const char* expression, const char* file, int line )
 
 void KdasmAssemblerNode::Clear( void )
 {
-	if( m_subnodes[0] )
+	for( int i=0; i < 2; ++i )
 	{
-		delete m_subnodes[0];
-		m_subnodes[0] = NULL;
-	}
-	if( m_subnodes[1] )
-	{
-		delete m_subnodes[1];
-		m_subnodes[1] = NULL;
+		if( m_subnodes[i] )
+		{
+			delete m_subnodes[i];
+			m_subnodes[i] = NULL;
+		}
 	}
 	if( m_leaves )
 	{
@@ -40,30 +39,29 @@ void KdasmAssemblerNode::Clear( void )
 	}
 }
 
-void KdasmAssemblerNode::AddSubnodes( unsigned short distance, unsigned short normal, KdasmAssemblerNode* less, KdasmAssemblerNode* greater )
+void KdasmAssemblerNode::AddSubnodes( KdasmU16 distance, KdasmU16 normal, KdasmAssemblerNode* less, KdasmAssemblerNode* greater )
 {
 	AddSubnodes( &distance, 1, normal, less, greater );
 }
 
-void KdasmAssemblerNode::AddSubnodes( intptr_t distance, int distanceLength, unsigned short normal, KdasmAssemblerNode* less, KdasmAssemblerNode* greater )
+void KdasmAssemblerNode::AddSubnodes( intptr_t distance, int distanceLength, KdasmU16 normal, KdasmAssemblerNode* less, KdasmAssemblerNode* greater )
 {
 	KdasmAssert( "Distance length max exceeded", distanceLength < KdasmEncodingHeader::DISTANCE_LENGTH_MAX );
-
 	for( int i=distanceLength; i--; /**/ )
 	{
-		m_distance[i] = (unsigned short)distance;
+		m_distance[i] = (KdasmU16)distance;
 		distance >>= 16;
 	}
 
 	AddSubnodes( m_distance, distanceLength, normal, less, greater );
 }
 
-void KdasmAssemblerNode::AddSubnodes( unsigned short* distance, int distanceLength, unsigned short normal, KdasmAssemblerNode* less, KdasmAssemblerNode* greater )
+void KdasmAssemblerNode::AddSubnodes( KdasmU16* distance, int distanceLength, KdasmU16 normal, KdasmAssemblerNode* less, KdasmAssemblerNode* greater )
 {
 	KdasmAssert( "Unsupported distance length", distanceLength > 0 && distanceLength <= KdasmEncodingHeader::DISTANCE_LENGTH_MAX );
-	KdasmAssert( "Distance out of range", distance[0] <= (unsigned short)KdasmEncoding::DISTANCE_IMMEDIATE_MAX );
-	KdasmAssert( "Distance has trailing bits that will be lost", distanceLength != 1 || ( distance[0] & ~(unsigned short)KdasmEncoding::DISTANCE_IMMEDIATE_MASK ) == 0 );
-	KdasmAssert( "First word of distance is too large", distanceLength == 1 || ( distance[0] & ~(unsigned short)KdasmEncoding::DISTANCE_PREFIX_MAX ) == 0 );
+	KdasmAssert( "Distance out of range", distance[0] <= (KdasmU16)KdasmEncoding::DISTANCE_IMMEDIATE_MAX );
+	KdasmAssert( "Distance has trailing bits that will be lost", distanceLength != 1 || ( distance[0] & ~(KdasmU16)KdasmEncoding::DISTANCE_IMMEDIATE_MASK ) == 0 );
+	KdasmAssert( "First word of distance is too large", distanceLength == 1 || ( distance[0] & ~(KdasmU16)KdasmEncoding::DISTANCE_PREFIX_MAX ) == 0 );
 	KdasmAssert( "Cutting normal must be 0, 1 or 2", normal < KdasmEncoding::NORMAL_OPCODE );
 
 	Clear();
@@ -80,7 +78,7 @@ void KdasmAssemblerNode::AddSubnodes( unsigned short* distance, int distanceLeng
 	m_subnodes[1] = greater;
 }
 
-void KdasmAssemblerNode::AddLeaves( intptr_t leafCount, unsigned short* leaves )
+void KdasmAssemblerNode::AddLeaves( intptr_t leafCount, KdasmU16* leaves )
 {
 	// Direct support for larger blocks of leaf data would add runtime checks.
 	// Count will be returned as KdasmEncoding::LEAF_COUNT_OVERFLOW if it is larger
@@ -105,7 +103,7 @@ bool KdasmAssemblerNode::Equals( const KdasmAssemblerNode& n, bool checkSubnodes
 		{
 			return false;
 		}
-		for( unsigned short i=0; i < m_distanceLength; ++i )
+		for( KdasmU16 i=0; i < m_distanceLength; ++i )
 		{
 			if( m_distance[i] != n.m_distance[i] )
 			{
@@ -128,7 +126,7 @@ bool KdasmAssemblerNode::Equals( const KdasmAssemblerNode& n, bool checkSubnodes
 	{
 		return false;
 	}
-	return ::memcmp( m_leaves, n.m_leaves, m_leafCount * sizeof( unsigned short ) ) == 0;
+	return ::memcmp( m_leaves, n.m_leaves, m_leafCount * sizeof( KdasmU16 ) ) == 0;
 }
 
 bool KdasmAssemblerNode::TrimEmpty( void )
@@ -153,7 +151,8 @@ KdasmAssemblerVirtualPage* KdasmAssemblerNode::GetVirtualPage( void )
 {
 	// Confirm that this is indeed a back pointer.
 #ifdef KDASM_PARANOIA
-	KdasmAssertDebug( !m_virtualPage || ( std::find( m_virtualPage->GetNodes().begin(), m_virtualPage->GetNodes().end(), this ) != m_virtualPage->GetNodes().end() ) );
+	KdasmAssertDebug( !m_virtualPage || ( std::find( m_virtualPage->GetNodes().begin(), m_virtualPage->GetNodes().end(), this )
+		!= m_virtualPage->GetNodes().end() ) );
 #endif
 	return m_virtualPage;
 }
@@ -285,7 +284,8 @@ bool KdasmAssemblerVirtualPage::ValidatePageHierarchy( void )
 {
 	for( size_t i=0; i < m_superPages.size(); ++i )
 	{
-		if( std::find( m_superPages[i]->m_subPages.begin(), m_superPages[i]->m_subPages.end(), this ) == m_superPages[i]->m_subPages.end() )
+		if( std::find( m_superPages[i]->m_subPages.begin(), m_superPages[i]->m_subPages.end(), this )
+			== m_superPages[i]->m_subPages.end() )
 		{
 			return false;
 		}
@@ -293,7 +293,8 @@ bool KdasmAssemblerVirtualPage::ValidatePageHierarchy( void )
 
 	for( size_t i=0; i < m_subPages.size(); ++i )
 	{
-		if( std::find( m_subPages[i]->m_superPages.begin(), m_subPages[i]->m_superPages.end(), this ) == m_subPages[i]->m_superPages.end() )
+		if( std::find( m_subPages[i]->m_superPages.begin(), m_subPages[i]->m_superPages.end(), this )
+			== m_subPages[i]->m_superPages.end() )
 		{
 			return false;
 		}
@@ -364,7 +365,7 @@ KdasmAssemblerVirtualPage* KdasmAssemblerPageAllocator::Allocate( intptr_t physi
 			// Run the physical page compactor before there is likely enough wasted
 			// space to overflow immediate mode addressing.
 			m_compactPhysicalPagesCounter += result->GetPhysicalPageCount();
-			if( m_compactPhysicalPagesCounter > (KdasmEncoding::IMMEDIATE_MAX/2) )
+			if( m_compactPhysicalPagesCounter > (KdasmEncoding::IMMEDIATE_OFFSET_MAX/2) )
 			{
 				m_compactPhysicalPagesCounter = 0;
 				CompactPhysicalPages();
@@ -486,7 +487,7 @@ void KdasmAssemblerNodeBreadthFirstQueue::Init( KdasmAssemblerNode* root, KdasmA
 	{
 		ptrdiff_t pagesRequired = pgAlloc.GetPhysicalPagesRequired( root );
 		pgAlloc.Allocate( pagesRequired )->InsertNode( root );
-		root->GetNodeTemp()->m_forceFarAddressing = root->GetLeafCount() > KdasmEncoding::LENGTH_MAX;
+		root->GetNodeTemp()->m_forceFarAddressing = root->GetLeafCount() > KdasmEncoding::LEAF_WORD_LENGTH_MAX;
 	}
 	m_nodes.push_back( root );
 }
@@ -510,7 +511,7 @@ KdasmAssemblerNode* KdasmAssemblerNodeBreadthFirstQueue::GetNext( KdasmAssembler
 			{
 				ptrdiff_t pagesRequired = pgAlloc.GetPhysicalPagesRequired( sn );
 				pgAlloc.Allocate( pagesRequired )->InsertNode( sn );
-				sn->GetNodeTemp()->m_forceFarAddressing = sn->GetLeafCount() > KdasmEncoding::LENGTH_MAX;
+				sn->GetNodeTemp()->m_forceFarAddressing = sn->GetLeafCount() > KdasmEncoding::LEAF_WORD_LENGTH_MAX;
 			}
 		}
 	}
@@ -622,7 +623,7 @@ std::vector<KdasmEncoding>& KdasmAssemblerPagePacker::Encode( KdasmAssemblerVirt
 #endif
 
 	KdasmEncoding t;
-	t.SetRaw( (unsigned short)KdasmEncoding::PAD_VALUE );
+	t.SetRaw( (KdasmU16)KdasmEncoding::PAD_VALUE );
 	m_encoding.assign( m_currentPageWords, t );
 
 	WriteEncoding();
@@ -854,7 +855,8 @@ bool KdasmAssemblerPagePacker::EvaluatePacking( intptr_t treeRoot, intptr_t inde
 	return stats.m_internalJumps == 0;
 }
 
-void KdasmAssemblerPagePacker::EvaluateSubnodePacking( KdasmAssemblerPageTempData* t, intptr_t index, intptr_t treeIndex, KdasmAssemblerPagePacker::PackingStats& stats )
+void KdasmAssemblerPagePacker::EvaluateSubnodePacking( KdasmAssemblerPageTempData* t, intptr_t index, intptr_t treeIndex,
+	KdasmAssemblerPagePacker::PackingStats& stats )
 {
 	KdasmAssertDebug( t->m_indices.m_encodingWordIndex == -1 );
 	KdasmAssertDebug( m_allocationMap[index] == NULL );
@@ -1049,7 +1051,7 @@ void KdasmAssemblerPagePacker::CalculateNodeExtraData( KdasmAssemblerPageTempDat
 				// Referenced by OPCODE_LEAVES_FAR.  Requires header.
 				if( n->GetLeafCount() < KdasmEncoding::LEAF_COUNT_OVERFLOW )
 				{
-					m_encoding[t->m_indices.m_extraDataIndex].SetRaw( (unsigned short)n->GetLeafCount() );
+					m_encoding[t->m_indices.m_extraDataIndex].SetRaw( (KdasmU16)n->GetLeafCount() );
 				}
 				else
 				{
@@ -1079,7 +1081,7 @@ void KdasmAssemblerPagePacker::CalculateNodeExtraData( KdasmAssemblerPageTempDat
 #ifdef KDASM_PARANOIA
 			KdasmAssertDebug( m_allocationMap[t->m_indices.m_extraDataIndex + i] == t );
 #endif
-			m_encoding[t->m_indices.m_extraDataIndex + i].SetRaw( (unsigned short)nodeOffset );
+			m_encoding[t->m_indices.m_extraDataIndex + i].SetRaw( (KdasmU16)nodeOffset );
 			nodeOffset >>= 16;
 		}
 
@@ -1100,8 +1102,8 @@ void KdasmAssemblerPagePacker::CalculateInternalJumpEncoding( KdasmAssemblerPage
 	KdasmEncoding x; x.SetRaw( 0 );
 	x.SetNomal( KdasmEncoding::NORMAL_OPCODE );
 	x.SetOpcode( KdasmEncoding::OPCODE_JUMP );
-	x.SetOperandOffset( (unsigned short)( t->m_indices.m_encodingWordIndex - t->m_indices.m_internalJumpIndex ) );
-	x.SetOperandTreeIndexStart( (unsigned short)t->m_indices.m_treeIndex );
+	x.SetOffset( (KdasmU16)( t->m_indices.m_encodingWordIndex - t->m_indices.m_internalJumpIndex ) );
+	x.SetTreeIndexStart( (KdasmU16)t->m_indices.m_treeIndex );
 
 	m_encoding[t->m_indices.m_internalJumpIndex] = x;
 }
@@ -1115,13 +1117,13 @@ void KdasmAssemblerPagePacker::CalculateNodeEncoding( KdasmAssemblerPageTempData
 	{
 		if( n->HasSubnodes() )
 		{
-			unsigned short normal = n->GetNormal();
+			KdasmU16 normal = n->GetNormal();
 			KdasmAssertDebug( normal != KdasmEncoding::NORMAL_OPCODE );
 			x.SetNomal( normal );
 			x.SetStop0( n->GetSubnode( 0 ) == NULL );
 			x.SetStop1( n->GetSubnode( 1 ) == NULL );
 
-			unsigned short distance0 = n->GetDistance()[0];
+			KdasmU16 distance0 = n->GetDistance()[0];
 			if( n->GetDistanceLength() == 1 )
 			{
 				x.SetDistanceImmediate( distance0 );
@@ -1130,7 +1132,7 @@ void KdasmAssemblerPagePacker::CalculateNodeEncoding( KdasmAssemblerPageTempData
 			{
 				KdasmAssertDebug( t->m_indices.m_extraDataIndex != -1 );
 				x.SetDistancePrefix( distance0 );
-				x.SetOperandOffset( (unsigned short)( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
+				x.SetOffset( (KdasmU16)( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
 			}
 		}
 		else
@@ -1139,26 +1141,26 @@ void KdasmAssemblerPagePacker::CalculateNodeEncoding( KdasmAssemblerPageTempData
 
 			x.SetNomal(  KdasmEncoding::NORMAL_OPCODE );
 			x.SetOpcode( KdasmEncoding::OPCODE_LEAVES );
-			x.SetOperandOffset( (unsigned short)( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
-			x.SetOperandLength( (unsigned short)t->m_indices.m_extraDataSize );
+			x.SetOffset( (KdasmU16)( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
+			x.SetLength( (KdasmU16)t->m_indices.m_extraDataSize );
 		}
 	}
 	else
 	{
 		x.SetNomal(  KdasmEncoding::NORMAL_OPCODE );
-		x.SetOpcode( n->HasSubnodes() ? (unsigned short)KdasmEncoding::OPCODE_JUMP_FAR : (unsigned short)KdasmEncoding::OPCODE_LEAVES_FAR );
+		x.SetOpcode( n->HasSubnodes() ? (KdasmU16)KdasmEncoding::OPCODE_JUMP_FAR : (KdasmU16)KdasmEncoding::OPCODE_LEAVES_FAR );
 
 		if( !t->m_isExternal || t->m_indices.m_extraDataSize == 0 )
 		{
 			intptr_t offset = CalculateNodeFarOffset( t );
-			x.SetIsOperandImmediate( true );
-			x.SetOperandImmediate( (unsigned short)offset );
+			x.SetIsImmediateOffset( true );
+			x.SetImmediateOffset( (KdasmU16)offset );
 		}
 		else
 		{
-			x.SetIsOperandImmediate( false );
-			x.SetOperandWordsOffset( (unsigned short)( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
-			x.SetOperandWordsCount( (unsigned short)t->m_indices.m_extraDataSize );
+			x.SetIsImmediateOffset( false );
+			x.SetFarWordsOffset( (KdasmU16)( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
+			x.SetFarWordsCount( (KdasmU16)t->m_indices.m_extraDataSize );
 		}
 	}
 
@@ -1244,7 +1246,7 @@ intptr_t KdasmAssemblerPagePacker::CalculateNodeFarOffset( KdasmAssemblerPageTem
 int KdasmAssemblerPagePacker::CalculateWordsRequired( intptr_t x )
 {
 	x = ::abs( x );
-	if( x <= KdasmEncoding::IMMEDIATE_MAX )
+	if( x <= KdasmEncoding::IMMEDIATE_OFFSET_MAX )
 	{
 		return 0;
 	}
@@ -1280,7 +1282,9 @@ bool KdasmAssemblerPagePacker::ValidateAllocationMap( void )
 	for( size_t i=0; i < m_pageTempData.size(); ++i )
 	{
 		KdasmAssemblerPageTempData* t = &m_pageTempData[i];
-		int referenceCount = (int)( t->m_indices.m_encodingWordIndex != -1 ) + (int)( t->m_indices.m_internalJumpIndex != -1 ) + (int)( t->m_indices.m_extraDataIndex != -1 );
+		int referenceCount = (int)( t->m_indices.m_encodingWordIndex != -1 )
+						   + (int)( t->m_indices.m_internalJumpIndex != -1 )
+						   + (int)( t->m_indices.m_extraDataIndex != -1 );
 		KdasmAssertDebug( referenceCount > 0 );
 		KdasmAssertDebug( referenceCount == t->m_validatedIndices );
 		KdasmAssertDebug( t->m_indices.m_internalJumpIndex == -1 || !t->m_isExternal );
@@ -1298,8 +1302,8 @@ bool KdasmAssemblerPagePacker::ValidateNodeEncoding( KdasmAssemblerPageTempData*
 	{
 		if( n->HasSubnodes() )
 		{
-			unsigned short normal = n->GetNormal();
-			unsigned short distance0 = n->GetDistance()[0];
+			KdasmU16 normal = n->GetNormal();
+			KdasmU16 distance0 = n->GetDistance()[0];
 			if( n->GetDistanceLength() == 1 )
 			{
 				KdasmAssertDebug( x.GetDistanceImmediate() == distance0 );
@@ -1317,7 +1321,7 @@ bool KdasmAssemblerPagePacker::ValidateNodeEncoding( KdasmAssemblerPageTempData*
 			KdasmAssertDebug( x.GetNomal() == KdasmEncoding::NORMAL_OPCODE );
 			KdasmAssertDebug( x.GetOpcode() == KdasmEncoding::OPCODE_LEAVES );
 			KdasmAssertDebug( x.UnpackOffset() == ( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
-			KdasmAssertDebug( x.GetOperandLength() == t->m_indices.m_extraDataSize );
+			KdasmAssertDebug( x.GetLength() == t->m_indices.m_extraDataSize );
 		}
 
 		if( t->m_indices.m_internalJumpIndex != -1 )
@@ -1327,7 +1331,7 @@ bool KdasmAssemblerPagePacker::ValidateNodeEncoding( KdasmAssemblerPageTempData*
 			KdasmAssertDebug( j.GetNomal() == KdasmEncoding::NORMAL_OPCODE );
 			KdasmAssertDebug( j.GetOpcode() == KdasmEncoding::OPCODE_JUMP );
 			KdasmAssertDebug( j.UnpackOffset() == ( t->m_indices.m_encodingWordIndex - t->m_indices.m_internalJumpIndex ) );
-			KdasmAssertDebug( j.GetOperandTreeIndexStart() == t->m_indices.m_treeIndex );
+			KdasmAssertDebug( j.GetTreeIndexStart() == t->m_indices.m_treeIndex );
 		}
 	}
 	else
@@ -1481,7 +1485,7 @@ void KdasmAssembler::Encode( KdasmAssemblerNode* root, KdasmEncodingHeader::Page
 
 	KdasmEncodingHeader h;
 	h.Reset();
-	h.SetDistanceLength( (unsigned short)root->GetDistanceLength() );
+	h.SetDistanceLength( (KdasmU16)root->GetDistanceLength() );
 	h.SetIsLeavesAtRoot( !root->HasSubnodes() );
 	h.SetPageBits( pageBits );
 
@@ -1550,7 +1554,7 @@ void KdasmAssembler::BinPack( void )
 
 						compactPhysicalPagesCounter += pg->GetPhysicalPageCount();
 						m_pageAllocator.Recycle( pg );
-						if( compactPhysicalPagesCounter > (KdasmEncoding::IMMEDIATE_MAX/2) )
+						if( compactPhysicalPagesCounter > (KdasmEncoding::IMMEDIATE_OFFSET_MAX/2) )
 						{
 							compactPhysicalPagesCounter = 0;
 							m_pageAllocator.CompactAndFreePhysicalPages();
@@ -1752,7 +1756,7 @@ KdasmAssemblerNode* KdasmDisassembler::Disassemble( KdasmEncoding* encodingRoot,
 
 KdasmAssemblerNode* KdasmDisassembler::DisassembleEncoding( KdasmEncoding* encoding, intptr_t treeIndex, KdasmAssemblerNode* compareTo )
 {
-	unsigned short normal = encoding->GetNomal();
+	KdasmU16 normal = encoding->GetNomal();
 	if( normal == KdasmEncoding::NORMAL_OPCODE )
 	{
 		switch( encoding->GetOpcode() )
@@ -1760,7 +1764,7 @@ KdasmAssemblerNode* KdasmDisassembler::DisassembleEncoding( KdasmEncoding* encod
 			case KdasmEncoding::OPCODE_LEAVES:
 			{
 				intptr_t offset = encoding->UnpackOffset();
-				intptr_t leafCount = (intptr_t)encoding->GetOperandLength();
+				intptr_t leafCount = (intptr_t)encoding->GetLength();
 				return DisassembleLeaves( encoding + offset, leafCount, compareTo );
 			}
 			case KdasmEncoding::OPCODE_LEAVES_FAR:
@@ -1771,7 +1775,7 @@ KdasmAssemblerNode* KdasmDisassembler::DisassembleEncoding( KdasmEncoding* encod
 			case KdasmEncoding::OPCODE_JUMP:
 			{
 				intptr_t offset = encoding->UnpackOffset();
-				intptr_t treeIndexStart = (intptr_t)encoding->GetOperandTreeIndexStart();
+				intptr_t treeIndexStart = (intptr_t)encoding->GetTreeIndexStart();
 				return DisassembleEncoding( encoding + offset, treeIndexStart, compareTo );
 			}
 			case KdasmEncoding::OPCODE_JUMP_FAR:
@@ -1790,7 +1794,7 @@ KdasmAssemblerNode* KdasmDisassembler::DisassembleEncoding( KdasmEncoding* encod
 	{
 		// This should be done with GetDistanceImmediate() or UnpackDistance<DISTANCE_LENGTH>().
 		// However this is generic tools code.
-		unsigned short distance[KdasmEncodingHeader::DISTANCE_LENGTH_MAX];
+		KdasmU16 distance[KdasmEncodingHeader::DISTANCE_LENGTH_MAX];
 		if( m_distanceLength == 1 )
 		{
 			distance[0] = encoding->GetDistanceImmediate();
@@ -1872,7 +1876,7 @@ KdasmAssemblerNode* KdasmDisassembler::DisassembleLeavesFar( KdasmEncoding* enco
 
 KdasmAssemblerNode* KdasmDisassembler::DisassembleLeaves( KdasmEncoding* encoding, intptr_t leafCount, KdasmAssemblerNode* compareTo )
 {
-	unsigned short* leaves = new unsigned short[leafCount];
+	KdasmU16* leaves = new KdasmU16[leafCount];
 	for( intptr_t i=0; i < leafCount; ++i )
 	{
 		leaves[i] = encoding[i].GetRaw();
@@ -1940,14 +1944,14 @@ void KdasmDisassembler::CalculateStats( KdasmEncoding* encodingRoot, intptr_t en
 
 void KdasmDisassembler::CalculateStatsEncoding( KdasmEncoding* encoding, intptr_t treeIndex, EncodingStats& stats )
 {
-	unsigned short normal = encoding->GetNomal();
+	KdasmU16 normal = encoding->GetNomal();
 	if( normal == KdasmEncoding::NORMAL_OPCODE )
 	{
 		switch( encoding->GetOpcode() )
 		{
 			case KdasmEncoding::OPCODE_LEAVES:
 			{
-				intptr_t leafCount = (intptr_t)encoding->GetOperandLength();
+				intptr_t leafCount = (intptr_t)encoding->GetLength();
 
 				++stats.m_leafNodeCount;
 				stats.m_leafblockData += leafCount; // Technically extra data, but that confuses the point.
@@ -1958,7 +1962,7 @@ void KdasmDisassembler::CalculateStatsEncoding( KdasmEncoding* encoding, intptr_
 				intptr_t offset = encoding->UnpackFarOffset();
 
 				++stats.m_leafNodeFarCount;
-				stats.m_leafNodeFarExtraData += encoding->GetIsOperandImmediate() ? 0 : encoding->GetOperandWordsCount();
+				stats.m_leafNodeFarExtraData += encoding->GetIsImmediateOffset() ? 0 : encoding->GetFarWordsCount();
 
 				CalculateStatsLeavesFar( encoding + offset, stats );
 				return;
@@ -1966,7 +1970,7 @@ void KdasmDisassembler::CalculateStatsEncoding( KdasmEncoding* encoding, intptr_
 			case KdasmEncoding::OPCODE_JUMP:
 			{
 				intptr_t offset = encoding->UnpackOffset();
-				intptr_t treeIndexStart = (intptr_t)encoding->GetOperandTreeIndexStart();
+				intptr_t treeIndexStart = (intptr_t)encoding->GetTreeIndexStart();
 
 				++stats.m_jumpNodeCount;
 
@@ -1978,7 +1982,7 @@ void KdasmDisassembler::CalculateStatsEncoding( KdasmEncoding* encoding, intptr_
 				intptr_t offset = encoding->UnpackFarOffset();
 
 				++stats.m_jumpNodeFarCount;
-				stats.m_jumpNodeFarExtraData += encoding->GetIsOperandImmediate() ? 0 : encoding->GetOperandWordsCount();
+				stats.m_jumpNodeFarExtraData += encoding->GetIsImmediateOffset() ? 0 : encoding->GetFarWordsCount();
 
 				CalculateStatsEncoding( encoding + offset, 0, stats );
 				return;

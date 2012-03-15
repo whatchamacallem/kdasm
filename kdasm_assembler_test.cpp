@@ -18,14 +18,14 @@ public:
 		int								m_distanceLength;
 		int								m_percentSubnodes;
 		int								m_percentEmpty;
-		unsigned short					m_seed;
+		KdasmU16						m_seed;
 		KdasmEncodingHeader::PageBits	m_pageBits;
 	};
 
 	KdasmTest( void );
 
-	void SRand( unsigned short s );
-	unsigned short Rand16( void );
+	void SRand( KdasmU16 s );
+	KdasmU16 Rand16( void );
 	int RandBool( unsigned int percentChance );
 	intptr_t Rand( size_t max );
 
@@ -40,7 +40,7 @@ public:
 	void TestRandom( KdasmAssembler& kdasmAssembler, KdasmDisassembler& kdasmDisassembler );
 
 private:
-	unsigned short	m_randSeed;
+	KdasmU16		m_randSeed;
 	intptr_t		m_activityCounter;
 	intptr_t		m_activityIncrement;
 };
@@ -51,16 +51,16 @@ KdasmTest::KdasmTest( void )
 {
 	m_randSeed = 1;
 	m_activityCounter = 0;
-	m_activityIncrement = 10000;
+	m_activityIncrement = 100000;
 }
 
 // Gerhard's generator
-void KdasmTest::SRand( unsigned short s )
+void KdasmTest::SRand( KdasmU16 s )
 {
     m_randSeed = s;
 }
 
-unsigned short KdasmTest::Rand16( void )
+KdasmU16 KdasmTest::Rand16( void )
 {
     m_randSeed = (m_randSeed * 32719 + 3) % 32749;
     return m_randSeed;
@@ -101,7 +101,7 @@ void KdasmTest::SpewAssemblerNodes( KdasmAssemblerNode* nodes, intptr_t depth )
 	else
 	{
 		intptr_t leafCount = nodes->GetLeafCount();
-		unsigned short* leaves = nodes->GetLeaves();
+		KdasmU16* leaves = nodes->GetLeaves();
 		printf( "%d leaves: ", leafCount );
 		for( intptr_t i=0; i < leafCount; ++i )
 		{
@@ -114,7 +114,7 @@ void KdasmTest::SpewAssemblerNodes( KdasmAssemblerNode* nodes, intptr_t depth )
 KdasmAssemblerNode* KdasmTest::GenerateRandomNodes( const KdasmTestRandomSettings& randomSettings )
 {
 	intptr_t maxNodes = randomSettings.m_maxNodes;
-	m_randSeed = (unsigned short)randomSettings.m_seed;
+	m_randSeed = (KdasmU16)randomSettings.m_seed;
 
 	KdasmAssemblerNode* root = new KdasmAssemblerNode;
 
@@ -134,10 +134,10 @@ KdasmAssemblerNode* KdasmTest::GenerateRandomNodes( const KdasmTestRandomSetting
 
 		if( less || greater )
 		{
-			unsigned short normal = Rand16() % 3;
+			KdasmU16 normal = Rand16() % 3;
 			if( randomSettings.m_distanceLength == 1 )
 			{
-				unsigned short distance = (unsigned short)( Rand( KdasmEncoding::DISTANCE_IMMEDIATE_MAX ) & KdasmEncoding::DISTANCE_IMMEDIATE_MASK );
+				KdasmU16 distance = (KdasmU16)( Rand( KdasmEncoding::DISTANCE_IMMEDIATE_MAX ) & KdasmEncoding::DISTANCE_IMMEDIATE_MASK );
 				current->AddSubnodes( distance, normal, less, greater );
 			}
 			else
@@ -165,7 +165,7 @@ KdasmAssemblerNode* KdasmTest::GenerateRandomNodes( const KdasmTestRandomSetting
 			if( !RandBool( randomSettings.m_percentEmpty ) )
 			{
 				intptr_t numLeaves = Rand( randomSettings.m_maxLeaves + 1 );
-				unsigned short* leaves = new unsigned short[numLeaves];
+				KdasmU16* leaves = new KdasmU16[numLeaves];
 				for( intptr_t i=0; i < numLeaves; ++i )
 				{
 					leaves[i] = Rand16();
@@ -184,7 +184,7 @@ KdasmAssemblerNode* KdasmTest::GenerateRandomNodes( const KdasmTestRandomSetting
 		active.pop_back();
 
 		intptr_t numLeaves = Rand( randomSettings.m_maxLeaves - 1 ) + 1;
-		unsigned short* leaves = new unsigned short[numLeaves];
+		KdasmU16* leaves = new KdasmU16[numLeaves];
 		for( int i=0; i < numLeaves; ++i )
 		{
 			leaves[i] = Rand16();
@@ -225,7 +225,7 @@ void KdasmTest::TestLeavesAtRoot( KdasmAssembler& kdasmAssembler, KdasmDisassemb
 		printf( "Test leaves at root %d.", sizes[i] );
 
 		KdasmAssemblerNode* leavesAtRoot = new KdasmAssemblerNode;
-		unsigned short* leaves = new unsigned short[sizes[i]];
+		KdasmU16* leaves = new KdasmU16[sizes[i]];
 		for( int j=0; j < sizes[i]; ++j )
 		{
 			leaves[j] = Rand16();
@@ -251,9 +251,11 @@ void KdasmTest::TestRandom( KdasmAssembler& kdasmAssembler, KdasmDisassembler& k
 	static const KdasmTestRandomSettings settings[] = {
 		// m_maxNodes,  m_maxLeaves,  m_distanceLength, m_percentSubnodes,  m_percentEmpty,  m_seed,  m_pageBits
 		{        2000,            7,                 1,                77,              30,  0x8a15,  KdasmEncodingHeader::PAGE_BITS_128B },
-		{        1000,          100,                 2,                70,              50,  0x61c6,  KdasmEncodingHeader::PAGE_BITS_64B  },
+		{        1000,          100,                 1,                70,              50,  0x61c6,  KdasmEncodingHeader::PAGE_BITS_64B  },
 		{         100,           10,                 4,                73,              20,  0x73e5,  KdasmEncodingHeader::PAGE_BITS_32B  },
-		{      100000,            8,                 1,                73,              20,  0x2152,  KdasmEncodingHeader::PAGE_BITS_64B  },
+#if !defined(_DEBUG)
+		{     1000000,            8,                 1,                73,              20,  0x2152,  KdasmEncodingHeader::PAGE_BITS_64B  },
+#endif
 		{        1000,          100,                 2,                70,              50,  0x7988,  KdasmEncodingHeader::PAGE_BITS_64B  },
 		{        1000,          100,                 2,                70,              50,  0xe750,  KdasmEncodingHeader::PAGE_BITS_64B  },
 		{        1000,          100,                 2,                70,              50,  0x5a30,  KdasmEncodingHeader::PAGE_BITS_64B  },
@@ -295,8 +297,8 @@ void KdasmTest::TestRandom( KdasmAssembler& kdasmAssembler, KdasmDisassembler& k
 		printf( "\t %8d jumpNodeFarCount\n", stats.m_jumpNodeFarCount );
 		printf( "\t %8d jumpNodeFarExtraData\n", stats.m_jumpNodeFarExtraData );
 
-		intptr_t nodeDataWithPadding = sizeof(unsigned short) * ( stats.m_totalEncodingData + stats.m_paddingData - stats.m_leafblockData );
-		intptr_t nodeDataNoPadding   = sizeof(unsigned short) * ( stats.m_totalEncodingData - stats.m_leafblockData );
+		intptr_t nodeDataWithPadding = sizeof(KdasmU16) * ( stats.m_totalEncodingData + stats.m_paddingData - stats.m_leafblockData );
+		intptr_t nodeDataNoPadding   = sizeof(KdasmU16) * ( stats.m_totalEncodingData - stats.m_leafblockData );
 		intptr_t nodeCount = stats.m_cuttingPlaneNodeCount + stats.m_leafNodeCount + stats.m_leafNodeFarCount;
 		if( nodeCount == 0 )
 		{
@@ -316,7 +318,7 @@ int main( void )
 	KdasmAssembler kdasmAssembler;
 	KdasmDisassembler kdasmDisassembler;
 
-	kdasmAssembler.SetActivityCallback( KdasmTest::ActivityCallback, (void*)&kdasmTest, 100 );
+	kdasmAssembler.SetActivityCallback( KdasmTest::ActivityCallback, (void*)&kdasmTest, 10000 );
 
 	kdasmTest.TestRandom( kdasmAssembler, kdasmDisassembler );
 	kdasmTest.TestLeavesAtRoot( kdasmAssembler, kdasmDisassembler );

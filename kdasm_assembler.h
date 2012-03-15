@@ -23,6 +23,8 @@ bool KdasmAssertFail( const char* expression, const char* file, int line );
 #define KdasmAssert( s, x ) (void)( !!( x ) || KdasmAssertFail( ( s ), __FILE__, __LINE__ ),0 )
 
 // ----------------------------------------------------------------------------
+// KdasmAssemblerNode
+//
 // This is the intermediate representation fed to the assembler.  Enforces not
 // having leaves attached to branch nodes.  (As that has it's own overhead and
 // the same result could be achived with the insertion of a special branch...)
@@ -34,25 +36,24 @@ public:
 	~KdasmAssemblerNode( void )									{ Clear(); }
 
 	bool HasSubnodes( void ) const								{ return m_subnodes[0] || m_subnodes[1]; }
-	unsigned short GetNormal( void ) const						{ return m_normal; }
-	const unsigned short* GetDistance( void ) const				{ return m_distance; }
+	KdasmU16 GetNormal( void ) const							{ return m_normal; }
+	const KdasmU16* GetDistance( void ) const					{ return m_distance; }
 	int GetDistanceLength( void ) const							{ return m_distanceLength; }
 	const KdasmAssemblerNode* GetSubnode( intptr_t i ) const	{ KdasmAssert( "Index out of range", i >= 0 && i < 2 ); return m_subnodes[i]; }
 	      KdasmAssemblerNode* GetSubnode( intptr_t i )			{ KdasmAssert( "Index out of range", i >= 0 && i < 2 ); return m_subnodes[i]; }
 	intptr_t GetLeafCount( void ) const							{ return m_leafCount; }
-	unsigned short* GetLeaves( void )							{ return m_leaves; }
+	KdasmU16* GetLeaves( void )									{ return m_leaves; }
 
-	void AddSubnodes( unsigned short distance, unsigned short normal, KdasmAssemblerNode* less, KdasmAssemblerNode* greater );
+	void AddSubnodes( KdasmU16 distance, KdasmU16 normal, KdasmAssemblerNode* less, KdasmAssemblerNode* greater );
 	// Distance length should remain constant across entire tree as it is only encoded in the header.
-	void AddSubnodes( intptr_t distance, int distanceLength, unsigned short normal, KdasmAssemblerNode* less, KdasmAssemblerNode* greater );
-	void AddSubnodes( unsigned short* distance, int distanceLength, unsigned short normal, KdasmAssemblerNode* less, KdasmAssemblerNode* greater );
-	void AddLeaves( intptr_t leafCount, unsigned short* leaves );
+	void AddSubnodes( intptr_t distance, int distanceLength, KdasmU16 normal, KdasmAssemblerNode* less, KdasmAssemblerNode* greater );
+	void AddSubnodes( KdasmU16* distance, int distanceLength, KdasmU16 normal, KdasmAssemblerNode* less, KdasmAssemblerNode* greater );
+	void AddLeaves( intptr_t leafCount, KdasmU16* leaves );
 	void Clear( void );
 	bool Equals( const KdasmAssemblerNode& n, bool checkSubnodes=true ) const;
-	bool TrimEmpty( void ); // Returns true if root node is empty.
+	bool TrimEmpty( void ); // Canonicalizes.  Returns true if root node is empty.
 
-	// Assemble time annotation.
-	intptr_t GetCompareToId( void )								{ return m_compareToId; }
+	// Internal
 	KdasmAssemblerVirtualPage* GetVirtualPage( void );
 	void SetVirtualPage( KdasmAssemblerVirtualPage* pg );
 	intptr_t GetPhysicalPageStart( void );
@@ -62,22 +63,24 @@ public:
 	      KdasmAssemblerNodeTempData* GetNodeTemp( void )		{ return m_nodeTempData; }
 	intptr_t AssemblePrepare( KdasmAssemblerNode* supernode, intptr_t nextCompareToId );
 	void AssembleFinish( void );
+	// Debug ID.
+	intptr_t GetCompareToId( void )								{ return m_compareToId; }
 
 private:
 	KdasmAssemblerNode( KdasmAssemblerNode& ); // undefined
 
-	unsigned short					m_normal;
-	unsigned short					m_distance[KdasmEncodingHeader::DISTANCE_LENGTH_MAX];
+	KdasmU16						m_normal;
+	KdasmU16						m_distance[KdasmEncodingHeader::DISTANCE_LENGTH_MAX];
 	int								m_distanceLength;
 	KdasmAssemblerNode*				m_subnodes[2];
 	intptr_t						m_leafCount;
-	unsigned short*					m_leaves;
+	KdasmU16*						m_leaves;
 
 	// Compile time data.
-	intptr_t						m_compareToId;
 	KdasmAssemblerVirtualPage*		m_virtualPage;
 	KdasmAssemblerPageTempData*		m_pageTempData;
 	KdasmAssemblerNodeTempData*		m_nodeTempData;
+	intptr_t						m_compareToId;
 };
 
 // ----------------------------------------------------------------------------
@@ -111,12 +114,12 @@ public:
 	static bool CompareByEncodingSize( const KdasmAssemblerVirtualPage* a, const KdasmAssemblerVirtualPage* b );
 
 private:
-	intptr_t								m_physicalPageStart;
-	intptr_t								m_physicalPageCount;			// In pages.
-	std::vector<KdasmAssemblerNode*>		m_nodes;
-	intptr_t								m_encodingSize;
-	std::vector<KdasmAssemblerVirtualPage*> m_superPages;
-	std::vector<KdasmAssemblerVirtualPage*> m_subPages;
+	intptr_t									m_physicalPageStart;
+	intptr_t									m_physicalPageCount;
+	std::vector<KdasmAssemblerNode*>			m_nodes;
+	intptr_t									m_encodingSize;
+	std::vector<KdasmAssemblerVirtualPage*>		m_superPages;
+	std::vector<KdasmAssemblerVirtualPage*>		m_subPages;
 };
 
 // ----------------------------------------------------------------------------
@@ -256,12 +259,12 @@ public:
 	typedef void (*ActivityCallback)( void* data );
 
 	KdasmAssembler( void );
-	void SetActivityCallback( ActivityCallback callback, void* data=NULL, int activityFrequency=1000 );
+	void SetActivityCallback( ActivityCallback callback, void* data=NULL, int activityFrequency=10000 );
 	void Assemble( KdasmAssemblerNode* root, KdasmEncodingHeader::PageBits pageBits, std::vector<KdasmEncoding>& encoding );
 
 private:
 	enum {
-		MAX_PAGE_MERGE_SCAN_DISTANCE = 8
+		MAX_PAGE_MERGE_SCAN_DISTANCE = 5
 	};
 
 	typedef std::vector<std::vector<KdasmAssemblerVirtualPage*> > PagesBySize;

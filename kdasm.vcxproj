@@ -26,9 +26,6 @@
     <ClInclude Include="kdasm.h" />
     <ClInclude Include="kdasm_assembler.h" />
   </ItemGroup>
-  <ItemGroup>
-    <None Include="kdasm_notes.txt" />
-  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{2BEEA286-D57B-4AA0-9129-8F3956C2C33E}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
