@@ -1730,7 +1730,7 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
                 {
                     if( pg != bin->GetSuperPage( i ) )
                     {
-                        if( !m_pagePacker.Pack( bin->GetSuperPages( i ), false ) )
+                        if( !m_pagePacker.Pack( bin->GetSuperPage( i ), false ) )
                         {
                             packOk = false;
                             break;
