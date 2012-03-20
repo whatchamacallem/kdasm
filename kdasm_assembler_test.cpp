@@ -29,8 +29,6 @@ public:
     KdasmU16 Rand16( void );
     int RandBool( unsigned int percentChance );
     intptr_t Rand( size_t max );
-
-    void SpewAssemblerNodes( KdasmAssemblerNode* nodes, intptr_t depth );
     KdasmAssemblerNode* GenerateRandomNodes( const KdasmTestRandomSettings& randomSettings );
 
     void TickActivity( bool callback );
@@ -81,36 +79,6 @@ intptr_t KdasmTest::Rand( size_t max )
         x |= (size_t)Rand16();
     }
     return (intptr_t)( x % max );
-}
-
-void KdasmTest::SpewAssemblerNodes( KdasmAssemblerNode* nodes, intptr_t depth )
-{
-    if( nodes == NULL )
-    {
-        return;
-    }
-    for( intptr_t i=0; i < depth; ++i )
-    {
-        putchar( ' ' );
-    }
-    if( nodes->HasSubnodes() )
-    {
-        printf( "branch %s%s%d %d\n", nodes->GetSubnode( 0 ) ? "less ": "", nodes->GetSubnode( 1 )
-			? "greater ": "", nodes->GetDistance(), nodes->GetNormal() );
-        SpewAssemblerNodes( nodes->GetSubnode( 0 ), depth + 1 );
-        SpewAssemblerNodes( nodes->GetSubnode( 1 ), depth + 1 );
-    }
-    else
-    {
-        intptr_t leafCount = nodes->GetLeafCount();
-        KdasmU16* leaves = nodes->GetLeaves();
-        printf( "%d leaves: ", leafCount );
-        for( intptr_t i=0; i < leafCount; ++i )
-        {
-            printf( "%d ", leaves[i] );
-        }
-        putchar( '\n' );
-    }
 }
 
 KdasmAssemblerNode* KdasmTest::GenerateRandomNodes( const KdasmTestRandomSettings& randomSettings )
@@ -254,18 +222,21 @@ void KdasmTest::TestRandom( KdasmAssembler& kdasmAssembler, KdasmDisassembler& k
         // maxNodes, maxLeaves, distanceLength, percentSubnodes, percentEmpty,   seed, pageBits
         {      2000,         7,              1,              77,           30, 0x8a15, KdasmEncodingHeader::PAGE_BITS_128B },
         {      1000,       100,              1,              70,           50, 0x61c6, KdasmEncodingHeader::PAGE_BITS_64B  },
-        {       100,        10,              4,              73,           20, 0x73e5, KdasmEncodingHeader::PAGE_BITS_32B  },
+        {       300,        10,              4,              73,           20, 0x73e5, KdasmEncodingHeader::PAGE_BITS_32B  },
+        {     10000,         8,              1,              73,           20, 0xd8e2, KdasmEncodingHeader::PAGE_BITS_64B  },
+        {    100000,         8,              1,              73,           20, 0xf5cc, KdasmEncodingHeader::PAGE_BITS_64B  },
+// The debug memory heap kills this test.
 #if !defined(_DEBUG)
         {   1000000,         8,              1,              73,           20, 0x2152, KdasmEncodingHeader::PAGE_BITS_64B  },
 #endif
-        {      1000,       100,              2,              70,           50, 0x7988, KdasmEncodingHeader::PAGE_BITS_64B  },
-        {      1000,       100,              2,              70,           50, 0xe750, KdasmEncodingHeader::PAGE_BITS_64B  },
-        {      1000,       100,              2,              70,           50, 0x5a30, KdasmEncodingHeader::PAGE_BITS_64B  },
+        {      2000,        10,              2,              70,           50, 0x7988, KdasmEncodingHeader::PAGE_BITS_64B  },
+        {      3000,        10,              1,              70,           50, 0xe751, KdasmEncodingHeader::PAGE_BITS_64B  },
+        {      4000,        10,              1,              70,           50, 0x5a30, KdasmEncodingHeader::PAGE_BITS_64B  },
     };
 
     for( int i=0; i < (sizeof settings / sizeof *settings); ++i )
     {
-        printf( "Test random %x.", settings[i].m_seed );
+        printf( "-----\nTest random %x.", settings[i].m_seed );
 
         m_randSeed = settings[i].m_seed;
 
@@ -275,7 +246,7 @@ void KdasmTest::TestRandom( KdasmAssembler& kdasmAssembler, KdasmDisassembler& k
         kdasmAssembler.Assemble( random, settings[i].m_pageBits, randomResult );
 
         KdasmAssemblerNode* randomDisassembly = kdasmDisassembler.Disassemble( &randomResult[0], random );
-        KdasmAssert( "Disassembly failed", random );
+        KdasmAssert( "Disassembly failed", randomDisassembly );
         KdasmAssert( "Disassembly is not equal", random->Equals( *randomDisassembly ) ); // Double check.
 
         delete random;
@@ -284,7 +255,12 @@ void KdasmTest::TestRandom( KdasmAssembler& kdasmAssembler, KdasmDisassembler& k
         KdasmDisassembler::EncodingStats stats;
         kdasmDisassembler.CalculateStats( &randomResult[0], (intptr_t)randomResult.size(), stats );
 
-        printf( "\nStats:\n" );
+        intptr_t nodeDataWithPadding = sizeof(KdasmU16) * ( stats.m_totalEncodingData + stats.m_paddingData - stats.m_leafblockData );
+        intptr_t nodeDataNoPadding   = sizeof(KdasmU16) * ( stats.m_totalEncodingData - stats.m_leafblockData );
+        intptr_t nodeCount = stats.m_cuttingPlaneNodeCount + stats.m_leafNodeCount + stats.m_leafNodeFarCount;
+        intptr_t leafNodeCount = stats.m_leafNodeCount + stats.m_leafNodeFarCount;
+
+        printf( "\nStats (compare in context of random generation settings):\n" );
         printf( "\t %8d totalEncodingData\n", stats.m_totalEncodingData );
         printf( "\t %8d paddingData\n", stats.m_paddingData );
         printf( "\t %8d headerData\n",  stats.m_headerData );
@@ -299,16 +275,10 @@ void KdasmTest::TestRandom( KdasmAssembler& kdasmAssembler, KdasmDisassembler& k
         printf( "\t %8d jumpNodeFarCount\n", stats.m_jumpNodeFarCount );
         printf( "\t %8d jumpNodeFarExtraData\n", stats.m_jumpNodeFarExtraData );
 
-        intptr_t nodeDataWithPadding = sizeof(KdasmU16) * ( stats.m_totalEncodingData + stats.m_paddingData - stats.m_leafblockData );
-        intptr_t nodeDataNoPadding   = sizeof(KdasmU16) * ( stats.m_totalEncodingData - stats.m_leafblockData );
-        intptr_t nodeCount = stats.m_cuttingPlaneNodeCount + stats.m_leafNodeCount + stats.m_leafNodeFarCount;
-        if( nodeCount == 0 )
-        {
-            nodeCount = 1; // Single block of leaf node.  Effectively encoded by the header.
-        }
-
+        printf( "%d nodes, %d leafnodes\n", nodeCount, leafNodeCount );
         printf( "%f bytes per-node, without leaf data\n", (float)(nodeDataWithPadding)/(float)(nodeCount) );
         printf( "%f bytes per-node, without leaf data or padding\n", (float)(nodeDataNoPadding)/(float)(nodeCount) );
+        printf( "%f average cache-misses per-leaf node\n", (float)(stats.m_totalCacheMissesForEachLeafNode)/(float)(leafNodeCount) );
     }
 }
 

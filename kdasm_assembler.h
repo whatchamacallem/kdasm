@@ -11,17 +11,21 @@
 
 // ----------------------------------------------------------------------------
 
+// Enables validation of internal processing. Useful during development to catch
+// problems close to where they occur.
+//#define KDASM_INTERNAL_VALIDATION
+
+bool KdasmAssertFail( const char* expression, const char* file, int line );
+#if defined(_DEBUG) || defined(KDASM_INTERNAL_VALIDATION)
+#define KdasmAssertInternal( x ) (void)( !!( x ) || KdasmAssertFail( "Internal Error", __FILE__, __LINE__ ),0 )
+#else
+#define KdasmAssertInternal( x ) (void)0
+#endif
+#define KdasmAssert( s, x ) (void)( !!( x ) || KdasmAssertFail( ( s ), __FILE__, __LINE__ ),0 )
+
 class KdasmAssemblerVirtualPage;
 struct KdasmAssemblerPageTempData;
 struct KdasmAssemblerNodeTempData;
-
-bool KdasmAssertFail( const char* expression, const char* file, int line );
-#if defined(_DEBUG)
-#define KdasmAssertDebug( x ) (void)( !!( x ) || KdasmAssertFail( "Internal Error", __FILE__, __LINE__ ),0 )
-#else
-#define KdasmAssertDebug( x ) (void)0
-#endif
-#define KdasmAssert( s, x ) (void)( !!( x ) || KdasmAssertFail( ( s ), __FILE__, __LINE__ ),0 )
 
 // ----------------------------------------------------------------------------
 // KdasmAssemblerNode
@@ -55,8 +59,8 @@ public:
     bool TrimEmpty( void ); // Canonicalizes.  Returns true if root node is empty.
 
     // Internal
-    KdasmAssemblerVirtualPage* GetVirtualPage( void );
-    void SetVirtualPage( KdasmAssemblerVirtualPage* pg );
+    KdasmAssemblerVirtualPage* GetVirtualPage( void )           { return m_virtualPage; }
+    void SetVirtualPage( KdasmAssemblerVirtualPage* pg )        { m_virtualPage = pg; }    
     intptr_t GetPhysicalPageStart( void );
     void SetPageTemp( KdasmAssemblerPageTempData* t )           { m_pageTempData = t; }
     KdasmAssemblerPageTempData* GetPageTemp( void );
@@ -97,7 +101,7 @@ public:
     intptr_t PageStart( void ) const;
     void InsertNode( KdasmAssemblerNode* n );
     void RemoveNode( KdasmAssemblerNode* n );
-    intptr_t NodeCount( void ) const                               { return (intptr_t)m_nodes.size(); }
+    intptr_t GetNodeCount( void ) const                            { return (intptr_t)m_nodes.size(); }
     std::vector<KdasmAssemblerNode*>& GetNodes( void )             { return m_nodes; }
     intptr_t GetPhysicalPageStart( void ) const                    { return m_physicalPageStart; }
     void SetPhysicalPageStart( intptr_t n )                        { m_physicalPageStart = n; }
@@ -105,12 +109,15 @@ public:
     void SetPhysicalPageCount( intptr_t n )                        { m_physicalPageCount = n; }
     void SetEncodingSize( intptr_t size )                          { m_encodingSize = size; }
     intptr_t GetEncodingSize( void ) const                         { return m_encodingSize; }
-    void BuildPageHierarchy( void );
     std::vector<KdasmAssemblerVirtualPage*>& GetSuperPages( void ) { return m_superPages; }
+    KdasmAssemblerVirtualPage* GetSuperPage( intptr_t i )          { return m_superPages[i]; }
     std::vector<KdasmAssemblerVirtualPage*>& GetSubPages( void )   { return m_subPages; }
-    bool ValidatePageHierarchy( void );
 
-    static bool CompareByPhysicalPages( const KdasmAssemblerVirtualPage* a, const KdasmAssemblerVirtualPage* b );
+	void BuildPageHierarchy( void );
+	void AppendPageHierarchy( KdasmAssemblerNode** additionalNodes, size_t additionalNodesCount );
+	bool ValidatePageHierarchy( void );
+
+	static bool CompareByPhysicalPages( const KdasmAssemblerVirtualPage* a, const KdasmAssemblerVirtualPage* b );
     static bool CompareByPhysicalPagesReverse( const KdasmAssemblerVirtualPage* a, const KdasmAssemblerVirtualPage* b );
     static bool CompareByEncodingSize( const KdasmAssemblerVirtualPage* a, const KdasmAssemblerVirtualPage* b );
 
@@ -207,7 +214,7 @@ class KdasmAssemblerPagePacker
 public:
     KdasmAssemblerPagePacker( void );
     void SetPageSize( int pageBits );
-    bool Pack( KdasmAssemblerVirtualPage* p, bool saveIfOk, intptr_t padding=0 );
+    bool Pack( KdasmAssemblerVirtualPage* p, bool saveIfOk, KdasmAssemblerNode** additionalNodes=NULL, size_t additionalNodesCount=0 );
     std::vector<KdasmEncoding>& Encode( KdasmAssemblerVirtualPage* p );
     void Clear( void );
     static void ClearEncodingIndices( KdasmAssemblerEncodingIndices* indices );
@@ -219,9 +226,9 @@ private:
         intptr_t m_internalJumps;
     };
 
-    void BuildNodeTempData( void );
+    void BuildNodeTempData( KdasmAssemblerNode** additionalNodes, size_t additionalNodesCount );
     void ClearNodeTempData( void );
-    bool PackExtraData( intptr_t padding );
+    bool PackExtraData( void );
     bool PackEncodingWords( void );
     bool EvaluatePacking( intptr_t treeRoot, intptr_t index, intptr_t treeIndex, PackingStats& bestFit );
     void EvaluateSubnodePacking( KdasmAssemblerPageTempData* t, intptr_t index, intptr_t treeIndex, PackingStats& stats );
@@ -265,7 +272,7 @@ public:
 
 private:
     enum {
-        MAX_PAGE_MERGE_SCAN_DISTANCE = 5
+        MAX_PAGE_MERGE_SCAN_DISTANCE = 8
     };
 
     typedef std::vector<std::vector<KdasmAssemblerVirtualPage*> > PagesBySize;
@@ -313,6 +320,7 @@ public:
         intptr_t m_jumpNodeCount;
         intptr_t m_jumpNodeFarCount;
         intptr_t m_jumpNodeFarExtraData;
+        intptr_t m_totalCacheMissesForEachLeafNode;
     };
 
     // Returns null on failure.  Optionally checks against compareTo in order to
@@ -330,12 +338,13 @@ private:
     void CalculateStatsLeavesFar( KdasmEncoding* encoding, EncodingStats& stats );
     void CalculateStatsLeaves( KdasmEncoding* encoding, intptr_t leafCount, EncodingStats& stats );
 
-    KdasmEncoding* PageBaseAddress( KdasmEncoding* encoding );
+    bool IsCacheMiss( KdasmEncoding* node, KdasmEncoding* subnode );
 
     int            m_distanceLength;
     intptr_t       m_compareToFailId;
-    intptr_t       m_pageWords;
+    intptr_t       m_pageAddressMask;
     KdasmEncoding* m_encodingRoot;
+    intptr_t       m_cacheMissDepth;
 };
 
 #endif // KDASM_ASSEMBLER_H

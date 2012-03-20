@@ -5,11 +5,6 @@
 #include <algorithm>
 #include "kdasm_assembler.h"
 
-// Enables an excessive level of validation that is useful during development
-// to catch problems close to where they occur.
-
-//#define KDASM_PARANOIA
-
 // ----------------------------------------------------------------------------
 
 // This is unlikely to be what you want.
@@ -148,21 +143,6 @@ bool KdasmAssemblerNode::TrimEmpty( void )
     return m_leafCount == 0;
 }
 
-KdasmAssemblerVirtualPage* KdasmAssemblerNode::GetVirtualPage( void )
-{
-    // Confirm that this is indeed a back pointer.
-#ifdef KDASM_PARANOIA
-    KdasmAssertDebug( !m_virtualPage || ( std::find( m_virtualPage->GetNodes().begin(), m_virtualPage->GetNodes().end(), this )
-        != m_virtualPage->GetNodes().end() ) );
-#endif
-    return m_virtualPage;
-}
-
-void KdasmAssemblerNode::SetVirtualPage( KdasmAssemblerVirtualPage* pg )
-{
-    m_virtualPage = pg;
-}
-
 intptr_t KdasmAssemblerNode::GetPhysicalPageStart( void )
 {
     return GetVirtualPage()->GetPhysicalPageStart();
@@ -170,7 +150,7 @@ intptr_t KdasmAssemblerNode::GetPhysicalPageStart( void )
 
 KdasmAssemblerPageTempData* KdasmAssemblerNode::GetPageTemp( void )
 {
-    KdasmAssertDebug( !m_pageTempData || m_pageTempData->m_node == this );
+    KdasmAssertInternal( !m_pageTempData || m_pageTempData->m_node == this );
     return m_pageTempData;
 }
 
@@ -183,7 +163,6 @@ intptr_t KdasmAssemblerNode::AssemblePrepare( KdasmAssemblerNode* supernode, int
     m_nodeTempData = new KdasmAssemblerNodeTempData;
     ::memset( m_nodeTempData, 0, sizeof *m_nodeTempData );
     m_nodeTempData->m_supernode = supernode;
-    m_nodeTempData->m_forceFarAddressing = false;
     KdasmAssemblerPagePacker::ClearEncodingIndices( &m_nodeTempData->m_internalIndices );
     KdasmAssemblerPagePacker::ClearEncodingIndices( &m_nodeTempData->m_externalIndices );
 
@@ -202,7 +181,7 @@ intptr_t KdasmAssemblerNode::AssemblePrepare( KdasmAssemblerNode* supernode, int
 
 void KdasmAssemblerNode::AssembleFinish( void )
 {
-    KdasmAssertDebug( m_pageTempData == NULL );
+    KdasmAssertInternal( m_pageTempData == NULL );
 
     m_virtualPage = NULL;
     if( m_nodeTempData )
@@ -232,23 +211,20 @@ KdasmAssemblerVirtualPage::KdasmAssemblerVirtualPage( void )
 
 intptr_t KdasmAssemblerVirtualPage::PageStart( void ) const
 {
-    KdasmAssertDebug( m_physicalPageStart != 0 || m_nodes[0]->GetNodeTemp()->m_supernode == NULL );
+    KdasmAssertInternal( m_physicalPageStart != 0 || m_nodes[0]->GetNodeTemp()->m_supernode == NULL );
     return ( m_physicalPageStart == 0 ) ? KdasmEncodingHeader::HEADER_LENGTH : 0;
 }
 
 void KdasmAssemblerVirtualPage::InsertNode( KdasmAssemblerNode* n )
 {
-    KdasmAssertDebug( n->GetVirtualPage() == NULL );
     n->SetVirtualPage( this );
     m_nodes.push_back( n );
 }
 
 void KdasmAssemblerVirtualPage::RemoveNode( KdasmAssemblerNode* n )
 {
-    KdasmAssertDebug( n->GetVirtualPage() == this );
-
     std::vector<KdasmAssemblerNode*>::reverse_iterator i = std::find( m_nodes.rbegin(), m_nodes.rend(), n );
-    KdasmAssertDebug( i != m_nodes.rend() );
+    KdasmAssertInternal( i != m_nodes.rend() );
     m_nodes.erase( i.base() - 1 );
 
     n->SetVirtualPage( NULL );
@@ -259,17 +235,28 @@ void KdasmAssemblerVirtualPage::BuildPageHierarchy( void )
     m_superPages.clear();
     m_subPages.clear();
 
-    for( size_t i=0; i < m_nodes.size(); ++i )
+	if( !m_nodes.empty() )
+	{
+		AppendPageHierarchy( &m_nodes[0], m_nodes.size() );
+	}
+}
+
+void KdasmAssemblerVirtualPage::AppendPageHierarchy( KdasmAssemblerNode** additionalNodes, size_t additionalNodesCount )
+{
+    for( size_t i=0; i < additionalNodesCount; ++i )
     {
-        KdasmAssemblerNode* n = m_nodes[i]->GetNodeTemp()->m_supernode;
+        KdasmAssemblerNode* n = additionalNodes[i]->GetNodeTemp()->m_supernode;
         if( n && n->GetVirtualPage() != this )
         {
-            m_superPages.push_back( n->GetVirtualPage() );
+            if( std::find( m_superPages.begin(), m_superPages.end(), n->GetVirtualPage() ) == m_superPages.end() )
+            {
+                m_superPages.push_back( n->GetVirtualPage() );
+            }
         }
 
         for( intptr_t j=0; j < 2; ++j )
         {
-            KdasmAssemblerNode* sn = m_nodes[i]->GetSubnode( j );
+            KdasmAssemblerNode* sn = additionalNodes[i]->GetSubnode( j );
             if( sn && sn->GetVirtualPage() != this )
             {
                 if( std::find( m_subPages.begin(), m_subPages.end(), sn->GetVirtualPage() ) == m_subPages.end() )
@@ -352,8 +339,8 @@ intptr_t KdasmAssemblerPageAllocator::GetPhysicalPagesRequired( KdasmAssemblerNo
 
 KdasmAssemblerVirtualPage* KdasmAssemblerPageAllocator::Allocate( intptr_t physicalPageCount )
 {
-    KdasmAssertDebug( physicalPageCount > 0 );
-    KdasmAssertDebug( m_physicalPageWords != 0 );
+    KdasmAssertInternal( physicalPageCount > 0 );
+    KdasmAssertInternal( m_physicalPageWords != 0 );
 
     KdasmAssemblerVirtualPage* result = NULL;
     if( !m_freeList.empty() )
@@ -387,15 +374,15 @@ KdasmAssemblerVirtualPage* KdasmAssemblerPageAllocator::Allocate( intptr_t physi
         m_nextPhysicalPage += physicalPageCount;
     }
 
-    KdasmAssertDebug( result->GetPhysicalPageStart() >= 0 && result->GetPhysicalPageCount() >= 0 );
+    KdasmAssertInternal( result->GetPhysicalPageStart() >= 0 && result->GetPhysicalPageCount() >= 0 );
     return result;
 }
 
 void KdasmAssemblerPageAllocator::Recycle( KdasmAssemblerVirtualPage* pg )
 {
-    KdasmAssertDebug( pg && pg->NodeCount() == 0 );
-#ifdef KDASM_PARANOIA
-    KdasmAssertDebug( std::find( m_freeList.begin(), m_freeList.end(), pg ) == m_freeList.end() );
+    KdasmAssertInternal( pg && pg->GetNodeCount() == 0 );
+#ifdef KDASM_INTERNAL_VALIDATION
+    KdasmAssertInternal( std::find( m_freeList.begin(), m_freeList.end(), pg ) == m_freeList.end() );
 #endif
 
     m_freeList.push_back( pg );
@@ -411,7 +398,7 @@ void KdasmAssemblerPageAllocator::CompactAndFreePhysicalPages( void )
         m_freeList.pop_back();
 
         std::vector<KdasmAssemblerVirtualPage*>::reverse_iterator i = std::find( m_pageList.rbegin(), m_pageList.rend(), pg );
-        KdasmAssertDebug( i != m_pageList.rend() );
+        KdasmAssertInternal( i != m_pageList.rend() );
         m_pageList.erase( i.base() - 1 );
         delete pg;
     }
@@ -428,7 +415,7 @@ void KdasmAssemblerPageAllocator::CompactPhysicalPages( void )
     for( std::vector<KdasmAssemblerVirtualPage*>::iterator it=m_pageList.begin(); it != m_pageList.end(); ++it )
     {
         KdasmAssemblerVirtualPage* pg = *it;
-        if( pg->NodeCount() == 0 )
+        if( pg->GetNodeCount() == 0 )
         {
             pg->SetPhysicalPageStart( -1 );
             pg->SetPhysicalPageCount( 0 );
@@ -441,7 +428,7 @@ void KdasmAssemblerPageAllocator::CompactPhysicalPages( void )
     for( std::vector<KdasmAssemblerVirtualPage*>::iterator it=m_pageList.begin(); it != m_pageList.end(); ++it )
     {
         KdasmAssemblerVirtualPage* pg = *it;
-        if( pg->NodeCount() != 0 )
+        if( pg->GetNodeCount() != 0 )
         {
             pg->SetPhysicalPageStart( currentPhysicalPageCount );
             currentPhysicalPageCount += pg->GetPhysicalPageCount();
@@ -483,7 +470,7 @@ void KdasmAssemblerPageAllocator::Clear( void )
 
 void KdasmAssemblerNodeBreadthFirstQueue::Init( KdasmAssemblerNode* root, KdasmAssemblerPageAllocator& pgAlloc )
 {
-    KdasmAssertDebug( m_nodes.empty() && root != NULL );
+    KdasmAssertInternal( m_nodes.empty() && root != NULL );
     if( !root->GetVirtualPage() )
     {
         ptrdiff_t pagesRequired = pgAlloc.GetPhysicalPagesRequired( root );
@@ -501,7 +488,7 @@ KdasmAssemblerNode* KdasmAssemblerNodeBreadthFirstQueue::GetNext( KdasmAssembler
     }
 
     KdasmAssemblerNode* n = m_nodes.front();
-    KdasmAssertDebug( n && n->GetVirtualPage() );
+    KdasmAssertInternal( n && n->GetVirtualPage() );
 
     for( intptr_t i=0; i < 2; ++i )
     {
@@ -521,10 +508,10 @@ KdasmAssemblerNode* KdasmAssemblerNodeBreadthFirstQueue::GetNext( KdasmAssembler
 
 void KdasmAssemblerNodeBreadthFirstQueue::PopNext( bool addSubnodes )
 {
-    KdasmAssertDebug( !m_nodes.empty() );
+    KdasmAssertInternal( !m_nodes.empty() );
     KdasmAssemblerNode* n = m_nodes.front();
     m_nodes.pop_front();
-    KdasmAssertDebug( n && n->GetVirtualPage() );
+    KdasmAssertInternal( n && n->GetVirtualPage() );
 
     if( addSubnodes )
     {
@@ -558,9 +545,9 @@ void KdasmAssemblerPagePacker::SetPageSize( int pageBits )
     m_pageWordBits = pageBits - 1;
 }
 
-bool KdasmAssemblerPagePacker::Pack( KdasmAssemblerVirtualPage* p, bool saveIfOk, intptr_t padding )
+bool KdasmAssemblerPagePacker::Pack( KdasmAssemblerVirtualPage* p, bool saveIfOk, KdasmAssemblerNode** additionalNodes, size_t additionalNodesCount )
 {
-    KdasmAssertDebug( p->GetPhysicalPageStart() >= 0 && p->GetPhysicalPageCount() >= 0 );
+    KdasmAssertInternal( p->GetPhysicalPageStart() >= 0 && p->GetPhysicalPageCount() >= 0 );
 
     m_virtualPage = p;
 
@@ -571,16 +558,16 @@ bool KdasmAssemblerPagePacker::Pack( KdasmAssemblerVirtualPage* p, bool saveIfOk
 
     m_allocationMap.assign( m_currentPageWords, NULL );
 
-    BuildNodeTempData();
+    BuildNodeTempData( additionalNodes, additionalNodesCount );
 
-    bool packOk = PackExtraData( padding );
+    bool packOk = PackExtraData();
     if( packOk )
     {
         packOk = PackEncodingWords();
         if( packOk )
         {
-#ifdef KDASM_PARANOIA
-            KdasmAssertDebug( ValidateAllocationMap() );
+#ifdef KDASM_INTERNAL_VALIDATION
+            KdasmAssertInternal( ValidateAllocationMap() );
 #endif
             if( saveIfOk )
             {
@@ -611,16 +598,16 @@ std::vector<KdasmEncoding>& KdasmAssemblerPagePacker::Encode( KdasmAssemblerVirt
     m_currentPageWords = (intptr_t)1 << m_pageWordBits;
     m_currentPageWords *= p->GetPhysicalPageCount();
 
-#ifdef KDASM_PARANOIA
+#ifdef KDASM_INTERNAL_VALIDATION
     m_allocationMap.assign( m_currentPageWords, NULL );
 #endif
 
-    BuildNodeTempData();
+    BuildNodeTempData( NULL, 0 );
 
     UseSavedEncodingIndices();
 
-#ifdef KDASM_PARANOIA
-    KdasmAssertDebug( ValidateAllocationMap() );
+#ifdef KDASM_INTERNAL_VALIDATION
+    KdasmAssertInternal( ValidateAllocationMap() );
 #endif
 
     KdasmEncoding t;
@@ -656,12 +643,15 @@ void KdasmAssemblerPagePacker::ClearEncodingIndices( KdasmAssemblerEncodingIndic
     indices->m_treeIndex = -1;
 }
 
-void KdasmAssemblerPagePacker::BuildNodeTempData( void )
+void KdasmAssemblerPagePacker::BuildNodeTempData( KdasmAssemblerNode** additionalNodes, size_t additionalNodesCount )
 {
-    std::vector<KdasmAssemblerNode*>& nodes = m_virtualPage->GetNodes();
+    std::vector<KdasmAssemblerNode*>& pageNodes = m_virtualPage->GetNodes();
+
+    KdasmAssemblerNode** nodes[2] = { pageNodes.empty() ? NULL : &pageNodes[0], additionalNodes };
+    size_t nodesCount[2] = { pageNodes.size(), additionalNodesCount };
 
     m_pageTempData.clear();
-    m_pageTempData.reserve( nodes.size() * 3 );  // storage for external nodes as well.
+    m_pageTempData.reserve( (nodesCount[0] + nodesCount[1]) * 3 );  // storage for external nodes as well.
 
     // Add entries for nodes within the page.
     KdasmAssemblerPageTempData t;
@@ -669,38 +659,44 @@ void KdasmAssemblerPagePacker::BuildNodeTempData( void )
     t.m_isPageRoot = true;
     ClearEncodingIndices( &t.m_indices );
 
-    for( size_t i=0; i < nodes.size(); ++i )
+    for( int source=0; source < 2; ++source )
     {
-        KdasmAssemblerNode* n = nodes[i];
-        t.m_node = n;
-        m_pageTempData.push_back( t );
-        n->SetPageTemp( &m_pageTempData.back() );
+        for( size_t i=0; i < nodesCount[source]; ++i )
+        {
+            KdasmAssemblerNode* n = nodes[source][i];
+            t.m_node = n;
+            m_pageTempData.push_back( t );
+            n->SetPageTemp( &m_pageTempData.back() );
+        }
     }
 
     // Now add the entries for external nodes.
     t.m_isExternal = true;
     t.m_isPageRoot = false;
 
-    for( size_t i=0; i < nodes.size(); ++i )
+    for( int source=0; source < 2; ++source )
     {
-        KdasmAssemblerNode* n = nodes[i];
-        for( int j=0; j < 2; ++j )
+        for( size_t i=0; i < nodesCount[source]; ++i )
         {
-            if( n->GetSubnode( j ) )
+            KdasmAssemblerNode* n = nodes[source][i];
+            for( int j=0; j < 2; ++j )
             {
-                KdasmAssemblerNode* sn = n->GetSubnode( j );
-                if( sn->GetVirtualPage() != m_virtualPage )
+                if( n->GetSubnode( j ) )
                 {
-                    KdasmAssertDebug( !sn->GetPageTemp() );
-                    t.m_node = sn;
-                    m_pageTempData.push_back( t );
-                    sn->SetPageTemp( &m_pageTempData.back() );
-                }
-                else
-                {
-                    KdasmAssemblerPageTempData* p = sn->GetPageTemp();
-                    KdasmAssertDebug( !p->m_isExternal );
-                    p->m_isPageRoot = sn->GetNodeTemp()->m_forceFarAddressing;
+                    KdasmAssemblerNode* sn = n->GetSubnode( j );
+                    if( sn->GetVirtualPage() != m_virtualPage )
+                    {
+                        KdasmAssertInternal( !sn->GetPageTemp() );
+                        t.m_node = sn;
+                        m_pageTempData.push_back( t );
+                        sn->SetPageTemp( &m_pageTempData.back() );
+                    }
+                    else
+                    {
+                        KdasmAssemblerPageTempData* p = sn->GetPageTemp();
+                        KdasmAssertInternal( !p->m_isExternal );
+                        p->m_isPageRoot = sn->GetNodeTemp()->m_forceFarAddressing;
+                    }
                 }
             }
         }
@@ -716,7 +712,7 @@ void KdasmAssemblerPagePacker::ClearNodeTempData( void )
     }
 }
 
-bool KdasmAssemblerPagePacker::PackExtraData( intptr_t padding )
+bool KdasmAssemblerPagePacker::PackExtraData( void )
 {
     // Special case for leaves at root.
     if( m_virtualPage->GetPhysicalPageStart() == 0 && m_pageTempData.size() == 1 )
@@ -733,7 +729,7 @@ bool KdasmAssemblerPagePacker::PackExtraData( intptr_t padding )
         return true;
     }
 
-    intptr_t extraDataIndex = m_currentPageWords - padding;
+    intptr_t extraDataIndex = m_currentPageWords;
 
     for( size_t i=0; i < m_pageTempData.size(); ++i )
     {
@@ -766,7 +762,7 @@ bool KdasmAssemblerPagePacker::PackExtraData( intptr_t padding )
 bool KdasmAssemblerPagePacker::PackEncodingWords( void )
 {
     // The initial tree roots are the non-leaf page roots.  References by
-	// OPCODE_LEAVES_FAR have no encoding.
+    // OPCODE_LEAVES_FAR have no encoding.
     for( size_t i=0; i < m_pageTempData.size(); ++i )
     {
         KdasmAssemblerPageTempData* t = &m_pageTempData[i];
@@ -860,8 +856,8 @@ bool KdasmAssemblerPagePacker::EvaluatePacking( intptr_t treeRoot, intptr_t inde
 void KdasmAssemblerPagePacker::EvaluateSubnodePacking( KdasmAssemblerPageTempData* t, intptr_t index, intptr_t treeIndex,
     KdasmAssemblerPagePacker::PackingStats& stats )
 {
-    KdasmAssertDebug( t->m_indices.m_encodingWordIndex == -1 );
-    KdasmAssertDebug( m_allocationMap[index] == NULL );
+    KdasmAssertInternal( t->m_indices.m_encodingWordIndex == -1 );
+    KdasmAssertInternal( m_allocationMap[index] == NULL );
 
     KdasmAssemblerNode* n = t->m_node;
     if( t->m_isExternal || !n->HasSubnodes() )
@@ -899,8 +895,8 @@ void KdasmAssemblerPagePacker::EvaluateSubnodePacking( KdasmAssemblerPageTempDat
 
 void KdasmAssemblerPagePacker::CommitSubtreePacking( KdasmAssemblerPageTempData* t, intptr_t index, intptr_t treeIndex )
 {
-    KdasmAssertDebug( t->m_indices.m_encodingWordIndex == -1 );
-    KdasmAssertDebug( m_allocationMap[index] == NULL );
+    KdasmAssertInternal( t->m_indices.m_encodingWordIndex == -1 );
+    KdasmAssertInternal( m_allocationMap[index] == NULL );
 
     m_allocationMap[index] = t;
 
@@ -930,8 +926,8 @@ void KdasmAssemblerPagePacker::CommitSubtreePacking( KdasmAssemblerPageTempData*
 
     if( subnodesOk )
     {
-        KdasmAssertDebug( t->m_indices.m_encodingWordIndex == -1 );
-        KdasmAssertDebug( t->m_indices.m_treeIndex == -1 || t->m_indices.m_treeIndex == 0 );
+        KdasmAssertInternal( t->m_indices.m_encodingWordIndex == -1 );
+        KdasmAssertInternal( t->m_indices.m_treeIndex == -1 || t->m_indices.m_treeIndex == 0 );
 
         t->m_indices.m_encodingWordIndex = index;
         t->m_indices.m_treeIndex = treeIndex;
@@ -948,7 +944,7 @@ void KdasmAssemblerPagePacker::CommitSubtreePacking( KdasmAssemblerPageTempData*
     else
     {
         // Destination tree index is decided when the new subtree is placed.
-        KdasmAssertDebug( t->m_indices.m_internalJumpIndex == -1 );
+        KdasmAssertInternal( t->m_indices.m_internalJumpIndex == -1 );
         t->m_indices.m_internalJumpIndex = index;
         m_treeRootsRemaining.push_back( t );
     }
@@ -973,13 +969,13 @@ void KdasmAssemblerPagePacker::WriteEncoding( void )
         }
     }
 
-#ifdef KDASM_PARANOIA
+#ifdef KDASM_INTERNAL_VALIDATION
     for( size_t i=0; i < m_pageTempData.size(); ++i )
     {
         KdasmAssemblerPageTempData* t = &m_pageTempData[i];
         if( t->m_indices.m_encodingWordIndex != -1 )
         {
-            KdasmAssertDebug( ValidateNodeEncoding( t ) );
+            KdasmAssertInternal( ValidateNodeEncoding( t ) );
         }
     }
 #endif
@@ -1035,8 +1031,8 @@ void KdasmAssemblerPagePacker::CalculateNodeExtraData( KdasmAssemblerPageTempDat
             for( int i=1; i < n->GetDistanceLength(); ++i )
             {
 
-#ifdef KDASM_PARANOIA
-                KdasmAssertDebug( m_allocationMap[t->m_indices.m_extraDataIndex + i - 1] == t );
+#ifdef KDASM_INTERNAL_VALIDATION
+                KdasmAssertInternal( m_allocationMap[t->m_indices.m_extraDataIndex + i - 1] == t );
 #endif
                 m_encoding[t->m_indices.m_extraDataIndex + i - 1].SetRaw( n->GetDistance()[i] );
             }
@@ -1047,8 +1043,8 @@ void KdasmAssemblerPagePacker::CalculateNodeExtraData( KdasmAssemblerPageTempDat
             if( t->m_isPageRoot )
             {
 
-#ifdef KDASM_PARANOIA
-                KdasmAssertDebug( m_allocationMap[t->m_indices.m_extraDataIndex] == t );
+#ifdef KDASM_INTERNAL_VALIDATION
+                KdasmAssertInternal( m_allocationMap[t->m_indices.m_extraDataIndex] == t );
 #endif
                 // Referenced by OPCODE_LEAVES_FAR.  Requires header.
                 if( n->GetLeafCount() < KdasmEncoding::LEAF_COUNT_OVERFLOW )
@@ -1066,8 +1062,8 @@ void KdasmAssemblerPagePacker::CalculateNodeExtraData( KdasmAssemblerPageTempDat
             // OPCODE_LEAVES.
             for( intptr_t i=0; i < n->GetLeafCount(); ++i )
             {
-#ifdef KDASM_PARANOIA
-                KdasmAssertDebug( m_allocationMap[t->m_indices.m_extraDataIndex + i + headerOffset] == t );
+#ifdef KDASM_INTERNAL_VALIDATION
+                KdasmAssertInternal( m_allocationMap[t->m_indices.m_extraDataIndex + i + headerOffset] == t );
 #endif
                 m_encoding[t->m_indices.m_extraDataIndex + i + headerOffset].SetRaw( n->GetLeaves()[i] );
             }
@@ -1080,25 +1076,25 @@ void KdasmAssemblerPagePacker::CalculateNodeExtraData( KdasmAssemblerPageTempDat
         // Write in reverse order.
         for( intptr_t i = t->m_indices.m_extraDataSize; i-- != 0; /**/ )
         {
-#ifdef KDASM_PARANOIA
-            KdasmAssertDebug( m_allocationMap[t->m_indices.m_extraDataIndex + i] == t );
+#ifdef KDASM_INTERNAL_VALIDATION
+            KdasmAssertInternal( m_allocationMap[t->m_indices.m_extraDataIndex + i] == t );
 #endif
             m_encoding[t->m_indices.m_extraDataIndex + i].SetRaw( (KdasmU16)nodeOffset );
             nodeOffset >>= 16;
         }
 
-        KdasmAssertDebug( nodeOffset == 0 || nodeOffset == -1 ); // Check for fit.
+        KdasmAssertInternal( nodeOffset == 0 || nodeOffset == -1 ); // Check for fit.
         // Most significant bit matches sign.
-        KdasmAssertDebug( ( ( m_encoding[t->m_indices.m_extraDataIndex].GetRaw() & 0x8000 ) != 0 ) == ( nodeOffset == -1 ) );
+        KdasmAssertInternal( ( ( m_encoding[t->m_indices.m_extraDataIndex].GetRaw() & 0x8000 ) != 0 ) == ( nodeOffset == -1 ) );
     }
 }
 
 void KdasmAssemblerPagePacker::CalculateInternalJumpEncoding( KdasmAssemblerPageTempData* t )
 {
-    KdasmAssertDebug( !t->m_isExternal && !t->m_isPageRoot ); // Would imply a *_FAR opcode instead.
-    KdasmAssertDebug( t->m_indices.m_encodingWordIndex != -1 && t->m_indices.m_treeIndex != -1 );
-#ifdef KDASM_PARANOIA
-    KdasmAssertDebug( m_allocationMap[t->m_indices.m_internalJumpIndex] == t );
+    KdasmAssertInternal( !t->m_isExternal && !t->m_isPageRoot ); // Would imply a *_FAR opcode instead.
+    KdasmAssertInternal( t->m_indices.m_encodingWordIndex != -1 && t->m_indices.m_treeIndex != -1 );
+#ifdef KDASM_INTERNAL_VALIDATION
+    KdasmAssertInternal( m_allocationMap[t->m_indices.m_internalJumpIndex] == t );
 #endif
 
     KdasmEncoding x; x.SetRaw( 0 );
@@ -1120,7 +1116,7 @@ void KdasmAssemblerPagePacker::CalculateNodeEncoding( KdasmAssemblerPageTempData
         if( n->HasSubnodes() )
         {
             KdasmU16 normal = n->GetNormal();
-            KdasmAssertDebug( normal != KdasmEncoding::NORMAL_OPCODE );
+            KdasmAssertInternal( normal != KdasmEncoding::NORMAL_OPCODE );
             x.SetNomal( normal );
             x.SetStop0( n->GetSubnode( 0 ) == NULL );
             x.SetStop1( n->GetSubnode( 1 ) == NULL );
@@ -1132,14 +1128,14 @@ void KdasmAssemblerPagePacker::CalculateNodeEncoding( KdasmAssemblerPageTempData
             }
             else
             {
-                KdasmAssertDebug( t->m_indices.m_extraDataIndex != -1 );
+                KdasmAssertInternal( t->m_indices.m_extraDataIndex != -1 );
                 x.SetDistancePrefix( distance0 );
                 x.SetOffset( (KdasmU16)( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
             }
         }
         else
         {
-            KdasmAssertDebug( !t->m_isPageRoot ); // References by OPCODE_LEAVES_FAR have no encoding.
+            KdasmAssertInternal( !t->m_isPageRoot ); // References by OPCODE_LEAVES_FAR have no encoding.
 
             x.SetNomal(  KdasmEncoding::NORMAL_OPCODE );
             x.SetOpcode( KdasmEncoding::OPCODE_LEAVES );
@@ -1166,8 +1162,8 @@ void KdasmAssemblerPagePacker::CalculateNodeEncoding( KdasmAssemblerPageTempData
         }
     }
 
-#ifdef KDASM_PARANOIA
-    KdasmAssertDebug( m_allocationMap[t->m_indices.m_encodingWordIndex] == t );
+#ifdef KDASM_INTERNAL_VALIDATION
+    KdasmAssertInternal( m_allocationMap[t->m_indices.m_encodingWordIndex] == t );
 #endif
     m_encoding[t->m_indices.m_encodingWordIndex] = x;
 }
@@ -1203,7 +1199,7 @@ void KdasmAssemblerPagePacker::UseSavedEncodingIndices( void )
             t->m_indices = t->m_node->GetNodeTemp()->m_internalIndices;
         }
 
-#ifdef KDASM_PARANOIA
+#ifdef KDASM_INTERNAL_VALIDATION
         if( t->m_indices.m_internalJumpIndex != -1 )
         {
             m_allocationMap[t->m_indices.m_internalJumpIndex] = t;
@@ -1231,13 +1227,13 @@ intptr_t KdasmAssemblerPagePacker::CalculateNodeFarOffset( KdasmAssemblerPageTem
     if( !t->m_isExternal || encodingWordIndex == -1 )
     {
         // Leaf nodes with far addressing have their extra data addressed directly.
-        KdasmAssertDebug( !n->HasSubnodes() && t->m_indices.m_internalJumpIndex == -1 );
+        KdasmAssertInternal( !n->HasSubnodes() && t->m_indices.m_internalJumpIndex == -1 );
         encodingWordIndex = n->GetNodeTemp()->m_internalIndices.m_extraDataIndex;
     }
 
-    KdasmAssertDebug( encodingWordIndex >= 0 );
-    KdasmAssertDebug( m_virtualPage->GetPhysicalPageStart() >= 0 && m_virtualPage->GetPhysicalPageCount() >= 0 );
-    KdasmAssertDebug( n->GetVirtualPage()->GetPhysicalPageStart() >= 0 && n->GetVirtualPage()->GetPhysicalPageCount() >= 0 );
+    KdasmAssertInternal( encodingWordIndex >= 0 );
+    KdasmAssertInternal( m_virtualPage->GetPhysicalPageStart() >= 0 && m_virtualPage->GetPhysicalPageCount() >= 0 );
+    KdasmAssertInternal( n->GetVirtualPage()->GetPhysicalPageStart() >= 0 && n->GetVirtualPage()->GetPhysicalPageCount() >= 0 );
 
     intptr_t pageWords = (intptr_t)1 << m_pageWordBits;
     intptr_t encodingLocation = m_virtualPage->GetPhysicalPageStart() * pageWords + t->m_indices.m_encodingWordIndex;
@@ -1271,11 +1267,11 @@ bool KdasmAssemblerPagePacker::ValidateAllocationMap( void )
         if( t != NULL )
         {
             if( t->m_indices.m_encodingWordIndex != i
-				&& t->m_indices.m_internalJumpIndex != i
-				&& t->m_indices.m_extraDataIndex != i )
+                && t->m_indices.m_internalJumpIndex != i
+                && t->m_indices.m_extraDataIndex != i )
             {
-                KdasmAssertDebug( t->m_indices.m_extraDataIndex <= i \
-					&& ( t->m_indices.m_extraDataIndex + t->m_indices.m_extraDataSize ) > i );
+                KdasmAssertInternal( t->m_indices.m_extraDataIndex <= i \
+                    && ( t->m_indices.m_extraDataIndex + t->m_indices.m_extraDataSize ) > i );
             }
             else
             {
@@ -1290,9 +1286,9 @@ bool KdasmAssemblerPagePacker::ValidateAllocationMap( void )
         int referenceCount = (int)( t->m_indices.m_encodingWordIndex != -1 )
                            + (int)( t->m_indices.m_internalJumpIndex != -1 )
                            + (int)( t->m_indices.m_extraDataIndex != -1 );
-        KdasmAssertDebug( referenceCount > 0 );
-        KdasmAssertDebug( referenceCount == t->m_validatedIndices );
-        KdasmAssertDebug( t->m_indices.m_internalJumpIndex == -1 || !t->m_isExternal );
+        KdasmAssertInternal( referenceCount > 0 );
+        KdasmAssertInternal( referenceCount == t->m_validatedIndices );
+        KdasmAssertInternal( t->m_indices.m_internalJumpIndex == -1 || !t->m_isExternal );
     }
 
     return true;
@@ -1311,40 +1307,40 @@ bool KdasmAssemblerPagePacker::ValidateNodeEncoding( KdasmAssemblerPageTempData*
             KdasmU16 distance0 = n->GetDistance()[0];
             if( n->GetDistanceLength() == 1 )
             {
-                KdasmAssertDebug( x.GetDistanceImmediate() == distance0 );
+                KdasmAssertInternal( x.GetDistanceImmediate() == distance0 );
             }
             else
             {
-                KdasmAssertDebug( x.GetDistancePrefix() == distance0 );
-                KdasmAssertDebug( x.UnpackOffset() == ( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
+                KdasmAssertInternal( x.GetDistancePrefix() == distance0 );
+                KdasmAssertInternal( x.UnpackOffset() == ( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
             }
 
-            KdasmAssertDebug( x.GetNomal() == normal );
+            KdasmAssertInternal( x.GetNomal() == normal );
         }
         else
         {
-            KdasmAssertDebug( x.GetNomal() == KdasmEncoding::NORMAL_OPCODE );
-            KdasmAssertDebug( x.GetOpcode() == KdasmEncoding::OPCODE_LEAVES );
-            KdasmAssertDebug( x.UnpackOffset() == ( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
-            KdasmAssertDebug( x.GetLength() == t->m_indices.m_extraDataSize );
+            KdasmAssertInternal( x.GetNomal() == KdasmEncoding::NORMAL_OPCODE );
+            KdasmAssertInternal( x.GetOpcode() == KdasmEncoding::OPCODE_LEAVES );
+            KdasmAssertInternal( x.UnpackOffset() == ( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
+            KdasmAssertInternal( x.GetLength() == t->m_indices.m_extraDataSize );
         }
 
         if( t->m_indices.m_internalJumpIndex != -1 )
         {
             KdasmEncoding& j = m_encoding[t->m_indices.m_internalJumpIndex];
 
-            KdasmAssertDebug( j.GetNomal() == KdasmEncoding::NORMAL_OPCODE );
-            KdasmAssertDebug( j.GetOpcode() == KdasmEncoding::OPCODE_JUMP );
-            KdasmAssertDebug( j.UnpackOffset() == ( t->m_indices.m_encodingWordIndex - t->m_indices.m_internalJumpIndex ) );
-            KdasmAssertDebug( j.GetTreeIndexStart() == t->m_indices.m_treeIndex );
+            KdasmAssertInternal( j.GetNomal() == KdasmEncoding::NORMAL_OPCODE );
+            KdasmAssertInternal( j.GetOpcode() == KdasmEncoding::OPCODE_JUMP );
+            KdasmAssertInternal( j.UnpackOffset() == ( t->m_indices.m_encodingWordIndex - t->m_indices.m_internalJumpIndex ) );
+            KdasmAssertInternal( j.GetTreeIndexStart() == t->m_indices.m_treeIndex );
         }
     }
     else
     {
         intptr_t offset = CalculateNodeFarOffset( t );
-        KdasmAssertDebug( x.GetNomal() == KdasmEncoding::NORMAL_OPCODE );
-        KdasmAssertDebug( x.GetOpcode() == ( n->HasSubnodes() ? KdasmEncoding::OPCODE_JUMP_FAR : KdasmEncoding::OPCODE_LEAVES_FAR ) );
-        KdasmAssertDebug( x.UnpackFarOffset() == offset ); // May read extra data words.
+        KdasmAssertInternal( x.GetNomal() == KdasmEncoding::NORMAL_OPCODE );
+        KdasmAssertInternal( x.GetOpcode() == ( n->HasSubnodes() ? KdasmEncoding::OPCODE_JUMP_FAR : KdasmEncoding::OPCODE_LEAVES_FAR ) );
+        KdasmAssertInternal( x.UnpackFarOffset() == offset ); // May read extra data words.
     }
 
     return true;
@@ -1387,7 +1383,7 @@ void KdasmAssembler::Assemble( KdasmAssemblerNode* root, KdasmEncodingHeader::Pa
     root->GetNodeTemp()->m_forceFarAddressing = true;
 
     m_globalQueue.Init( root, m_pageAllocator );
-    KdasmAssertDebug( root->GetVirtualPage()->PageStart() != 0 ); // Is header page.
+    KdasmAssertInternal( root->GetVirtualPage()->PageStart() != 0 ); // Is header page.
 
     while( !m_globalQueue.Empty() )
     {
@@ -1424,26 +1420,28 @@ void KdasmAssembler::PackNextPage( void )
     KdasmAssemblerNode* pageRootNode = m_globalQueue.GetNext( m_pageAllocator );
     m_globalQueue.PopNext( false ); // remove node and subtree from global queue.
 
-    KdasmAssertDebug( pageRootNode );
+    KdasmAssertInternal( pageRootNode );
     m_pageQueue.Init( pageRootNode, m_pageAllocator );
     m_pageQueue.PopNext( true ); // add subnodes to page queue.
 
     KdasmAssemblerVirtualPage* virtualPage = pageRootNode->GetVirtualPage();
-    KdasmAssertDebug( virtualPage );
+    KdasmAssertInternal( virtualPage );
 
     while( !m_pageQueue.Empty() )
     {
         KdasmAssemblerNode* nodeToAdd = m_pageQueue.GetNext( m_pageAllocator );
 
         KdasmAssemblerVirtualPage* virtualPagePrevioius = nodeToAdd->GetVirtualPage();
-        virtualPagePrevioius->RemoveNode( nodeToAdd );
-        KdasmAssertDebug( virtualPagePrevioius->NodeCount() == 0 );
-        virtualPage->InsertNode( nodeToAdd );
+        nodeToAdd->SetVirtualPage( virtualPage );
 
-        // Add two pad words to allow longer external references when bin packing.  This
+        // Add one pad word to allow longer external references when bin packing.  This
         // is the one bit of fudge factor and should be improved on.
-        if( m_pagePacker.Pack( virtualPage, true, 2 ) )
+        if( m_pagePacker.Pack( virtualPage, true, &nodeToAdd, 1 ) )
         {
+            virtualPagePrevioius->RemoveNode( nodeToAdd );
+            KdasmAssertInternal( virtualPagePrevioius->GetNodeCount() == 0 );
+            virtualPage->InsertNode( nodeToAdd );
+
             m_pageAllocator.Recycle( virtualPagePrevioius );
             m_pageQueue.PopNext( true );
 
@@ -1454,19 +1452,18 @@ void KdasmAssembler::PackNextPage( void )
         }
         else
         {
-            virtualPage->RemoveNode( nodeToAdd );
-            virtualPagePrevioius->InsertNode( nodeToAdd );
+            nodeToAdd->SetVirtualPage( virtualPagePrevioius );
 
             m_globalQueue.Append( nodeToAdd );
             m_pageQueue.PopNext( false );
         }
     }
 
-    if( virtualPage->NodeCount() == 1 )
+    if( virtualPage->GetNodeCount() == 1 )
     {
         // Inital state was never stored.
         bool result = m_pagePacker.Pack( virtualPage, true );
-        KdasmAssertDebug( result );
+        KdasmAssertInternal( result );
     }
 }
 
@@ -1483,8 +1480,8 @@ void KdasmAssembler::Encode( KdasmAssemblerNode* root, KdasmEncodingHeader::Page
         TickActivity();
     }
 
-    KdasmAssertDebug( result.size() == expectedSize );
-    KdasmAssertDebug( pages[0]->GetNodes().front() == root );
+    KdasmAssertInternal( result.size() == expectedSize );
+    KdasmAssertInternal( pages[0]->GetNodes().front() == root );
 
     KdasmEncodingHeader h;
     h.Reset();
@@ -1494,7 +1491,7 @@ void KdasmAssembler::Encode( KdasmAssemblerNode* root, KdasmEncodingHeader::Page
 
     for( int i=0; i < KdasmEncodingHeader::HEADER_LENGTH; ++i )
     {
-        KdasmAssertDebug( result[i].GetRaw() == KdasmEncoding::PAD_VALUE );
+        KdasmAssertInternal( result[i].GetRaw() == KdasmEncoding::PAD_VALUE );
         result[i].SetRaw( h.GetRaw( i ) );
     }
 }
@@ -1514,18 +1511,19 @@ void KdasmAssembler::BinPack( void )
     ptrdiff_t compactPhysicalPagesCounter = 0;
     for( ptrdiff_t i=pageWords; i > 0; --i )
     {
+#ifdef KDASM_INTERNAL_VALIDATION
         for( size_t j=0; j < pages.size(); ++j )
         {
             KdasmAssertDebug( pages[j]->ValidatePageHierarchy() );
         }
-
+#endif
         while( !m_pagesBySize[i].empty() )
         {
             KdasmAssemblerVirtualPage* bin = m_pagesBySize[i].back();
             m_pagesBySize[i].pop_back();
 
             ptrdiff_t remainingWords = bin->GetPhysicalPageCount() * pageWords - bin->GetEncodingSize();
-            KdasmAssertDebug( remainingWords >= 0 && remainingWords < pageWords );
+            KdasmAssertInternal( remainingWords >= 0 && remainingWords < pageWords );
             if( remainingWords > i )
             {
                 remainingWords = i; // Larger pages were already packed and removed.
@@ -1564,7 +1562,7 @@ void KdasmAssembler::BinPack( void )
                         }
 
                         remainingWords = bin->GetPhysicalPageCount() * pageWords - bin->GetEncodingSize();
-                        KdasmAssertDebug( remainingWords >= 0 && remainingWords < pageWords );
+                        KdasmAssertInternal( remainingWords >= 0 && remainingWords < pageWords );
                         if( j > remainingWords )
                         {
                             j = remainingWords + 1; // skip to remainingWords.
@@ -1597,7 +1595,7 @@ void KdasmAssembler::BinPack( void )
                             break;
                         }
                     }
-                    if( distance > MAX_PAGE_MERGE_SCAN_DISTANCE )
+                    if( ::abs( distance ) > MAX_PAGE_MERGE_SCAN_DISTANCE )
                     {
                         break;
                     }
@@ -1634,7 +1632,7 @@ void KdasmAssembler::BuildPagesBySize( intptr_t pageWords )
             m_pagesBySize[pg->GetEncodingSize()].push_back( pg );
         }
     }
-    KdasmAssertDebug( m_pagesBySize[0].empty() );
+    KdasmAssertInternal( m_pagesBySize[0].empty() );
 
     // As a special case, oversize pages are packed first and are bins only, but at
     // least hit them in the right order.
@@ -1643,47 +1641,146 @@ void KdasmAssembler::BuildPagesBySize( intptr_t pageWords )
 
 intptr_t KdasmAssembler::FindClosestPhysicalPage( KdasmAssemblerVirtualPage* bin, std::vector<KdasmAssemblerVirtualPage*>& pages )
 {
-    KdasmAssertDebug( !pages.empty() );
+    KdasmAssertInternal( !pages.empty() );
+
+    // This early out is normal with large data sets.  The pages are stored in
+    // reverse physical order to make it efficient to remove entries.
+    if( pages.back()->GetPhysicalPageStart() < bin->GetPhysicalPageStart() )
+    {
+        return pages.size() - 1;
+    }
+    
     std::vector<KdasmAssemblerVirtualPage*>::iterator i = std::lower_bound( pages.begin(), pages.end(),
         bin, KdasmAssemblerVirtualPage::CompareByPhysicalPagesReverse );
-
     if( i == pages.end() )
     {
         i = pages.end() - 1;
     }
+
     return (intptr_t)( i - pages.begin() );
 }
 
 bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerVirtualPage* pg )
 {
-    std::vector<KdasmAssemblerNode*>& binNodes = bin->GetNodes();
     std::vector<KdasmAssemblerNode*>& pgNodes = pg->GetNodes();
     size_t pgNodeCount = pgNodes.size();
 
-    // Append page nodes to bin.
-    binNodes.insert( binNodes.end(), pgNodes.begin(), pgNodes.end() );
-    for( size_t i=binNodes.size() - pgNodeCount; i < binNodes.size(); ++i )
+    for( size_t i=0; i < pgNodeCount; ++i )
     {
-        binNodes[i]->SetVirtualPage( bin );
+        pgNodes[i]->SetVirtualPage( bin );
     }
-    bin->BuildPageHierarchy();
+    bin->AppendPageHierarchy( &pgNodes[0], pgNodeCount );
 
-    // Test if page and referring pages will still encode within size limits.
-    bool packOk = m_pagePacker.Pack( bin, false );
+    // Test if bin and referring pages can encode within size limits.
+    bool packOk = m_pagePacker.Pack( bin, false, &pgNodes[0], pgNodeCount );
+    KdasmAssemblerVirtualPage* failingPage = NULL;
     if( packOk )
     {
         for( size_t i=0; i < bin->GetSuperPages().size(); ++i )
         {
-            if( !m_pagePacker.Pack( bin->GetSuperPages()[i], false ) )
+            if( bin->GetSuperPage( i ) == pg )
             {
-                packOk = false;
-                break;
+                continue;
+            }
+            if( !m_pagePacker.Pack( bin->GetSuperPage( i ), false ) )
+            {
+                if( failingPage == NULL )
+                {
+                    failingPage = bin->GetSuperPage( i );
+                    KdasmAssertInternal( failingPage != bin );
+                }
+                else
+                {
+                    packOk = false;
+                    break;
+                }
             }
         }
     }
+
+    if( packOk && failingPage != NULL )
+    {
+        // Try moving the branch node down into the bin from the failing super page.
+        std::vector<KdasmAssemblerNode*>& superNodes = failingPage->GetNodes();
+        KdasmAssemblerNode* superNode = NULL;
+        for( size_t i=0; i < superNodes.size(); ++i )
+        {
+            KdasmAssemblerNode* n = superNodes[i];
+            for( intptr_t j=0; j < 2; ++j )
+            {
+                if( n->GetSubnode( j ) && n->GetSubnode( j )->GetVirtualPage() == bin )
+                {
+                    superNode = n;
+                    break;
+                }
+            }
+        }
+        KdasmAssertInternal( superNode != NULL );
+
+        failingPage->RemoveNode( superNode );
+        bin->InsertNode( superNode );
+
+        packOk = m_pagePacker.Pack( bin, false, &pgNodes[0], pgNodeCount );
+        if( packOk )
+        {
+            packOk = m_pagePacker.Pack( failingPage, false );
+            if( packOk )
+            {
+                for( size_t i=0; i < bin->GetSuperPages().size(); ++i )
+                {
+                    if( pg != bin->GetSuperPage( i ) )
+                    {
+                        if( !m_pagePacker.Pack( bin->GetSuperPages( i ), false ) )
+                        {
+                            packOk = false;
+                            break;
+                        }
+                    }
+                }
+                if( packOk )
+                {
+                    for( size_t i=0; i < failingPage->GetSuperPages().size(); ++i )
+                    {
+                        if( bin != failingPage->GetSuperPage( i ) && pg != failingPage->GetSuperPage( i ) )
+                        {
+                            if( !m_pagePacker.Pack( failingPage->GetSuperPage( i ), false ) )
+                            {
+                                packOk = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if( packOk )
+        {
+            // Commit to modification of failing super page.
+            bool packOk = m_pagePacker.Pack( failingPage, true );
+            for( size_t i=0; i < failingPage->GetSuperPages().size(); ++i )
+            {
+                if( bin != failingPage->GetSuperPage( i ) && pg != failingPage->GetSuperPage( i ) )
+                {
+                    packOk |= m_pagePacker.Pack( failingPage->GetSuperPage( i ), true );
+                }
+            }
+            KdasmAssertInternal( packOk );
+
+            failingPage->BuildPageHierarchy();
+        }
+        else
+        {
+            bin->RemoveNode( superNode );
+            failingPage->InsertNode( superNode );
+        }
+    }    
+    
     if( packOk )
     {
         // Commit to page merge.
+        std::vector<KdasmAssemblerNode*>& binNodes = bin->GetNodes();
+        binNodes.insert( binNodes.end(), pgNodes.begin(), pgNodes.end() );
+
         pgNodes.clear();
         pg->BuildPageHierarchy();
 
@@ -1693,7 +1790,7 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
             bin->GetSuperPages()[i]->BuildPageHierarchy();
             packOk |= m_pagePacker.Pack( bin->GetSuperPages()[i], true );
         }
-        KdasmAssertDebug( packOk );
+        KdasmAssertInternal( packOk );
 
         for( size_t i=0; i < bin->GetSubPages().size(); ++i )
         {
@@ -1708,9 +1805,9 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
             pgNodes[i]->SetVirtualPage( pg );
         }
 
-        binNodes.erase( binNodes.end() - pgNodeCount, binNodes.end() );
         bin->BuildPageHierarchy();
     }
+
     return packOk;
 }
 
@@ -1732,11 +1829,9 @@ KdasmAssemblerNode* KdasmDisassembler::Disassemble( KdasmEncoding* encodingRoot,
     KdasmEncodingHeader* header = (KdasmEncodingHeader*)encodingRoot;
     if( !header->VersionCheck() )
     {
+        KdasmAssert( "Version Incorrect", 0 );
         return NULL;
     }
-
-    m_pageWords    = (intptr_t)1 << (header->GetPageBits() - 1);
-    m_encodingRoot = encodingRoot;
 
     KdasmAssemblerNode* result = NULL;
     if( header->IsLeavesAtRoot() )
@@ -1745,6 +1840,7 @@ KdasmAssemblerNode* KdasmDisassembler::Disassemble( KdasmEncoding* encodingRoot,
     }
     else
     {
+        m_pageAddressMask = ((intptr_t)1 << (header->GetPageBits() - 1)) - 1;
         m_distanceLength = (int)header->GetDistanceLength();
         result = DisassembleEncoding( encodingRoot + KdasmEncodingHeader::HEADER_LENGTH, 0, compareTo );
     }
@@ -1788,7 +1884,7 @@ KdasmAssemblerNode* KdasmDisassembler::DisassembleEncoding( KdasmEncoding* encod
             }
             default:
             {
-                KdasmAssertDebug( 0 ); // Impossible
+                KdasmAssertInternal( 0 );
                 return NULL;
             }
         }
@@ -1814,13 +1910,19 @@ KdasmAssemblerNode* KdasmDisassembler::DisassembleEncoding( KdasmEncoding* encod
         }
 
         // This would fire if PAD_VALUE data was hit.
-        KdasmAssertDebug( !encoding->GetStop0() || !encoding->GetStop1() );
+        KdasmAssertInternal( !encoding->GetStop0() || !encoding->GetStop1() );
 
         if( compareTo )
         {
-            if( compareTo->GetNormal() != normal
-                || compareTo->GetDistanceLength() != m_distanceLength )
+            if( compareTo->GetNormal() != normal )
             {
+                KdasmAssert( "Normal Incorrect", 0 );
+                m_compareToFailId = compareTo->GetCompareToId();
+                return NULL;
+            }
+            if( compareTo->GetDistanceLength() != m_distanceLength )
+            {
+                KdasmAssert( "Distance Length Incorrect", 0 );
                 m_compareToFailId = compareTo->GetCompareToId();
                 return NULL;
             }
@@ -1828,6 +1930,7 @@ KdasmAssemblerNode* KdasmDisassembler::DisassembleEncoding( KdasmEncoding* encod
             {
                 if( distance[i] != compareTo->GetDistance()[i] )
                 {
+                    KdasmAssert( "Distance Incorrect", 0 );
                     m_compareToFailId = compareTo->GetCompareToId();
                     return NULL;
                 }
@@ -1835,11 +1938,13 @@ KdasmAssemblerNode* KdasmDisassembler::DisassembleEncoding( KdasmEncoding* encod
 
             if( encoding->GetStop0() != ( compareTo->GetSubnode( 0 ) == NULL ) )
             {
+                KdasmAssert( "Stop 0 Incorrect", 0 );
                 m_compareToFailId = compareTo->GetCompareToId();
                 return NULL;
             }
             if( encoding->GetStop1() != ( compareTo->GetSubnode( 1 ) == NULL ) )
             {
+                KdasmAssert( "Stop 1 Incorrect", 0 );
                 m_compareToFailId = compareTo->GetCompareToId();
                 return NULL;
             }
@@ -1889,6 +1994,7 @@ KdasmAssemblerNode* KdasmDisassembler::DisassembleLeaves( KdasmEncoding* encodin
     {
         if( compareTo->GetLeafCount() != leafCount )
         {
+            KdasmAssert( "Leaf Count Incorrect", 0 );
             m_compareToFailId = compareTo->GetCompareToId();
             return NULL;
         }
@@ -1896,6 +2002,7 @@ KdasmAssemblerNode* KdasmDisassembler::DisassembleLeaves( KdasmEncoding* encodin
         {
             if( leaves[i] != compareTo->GetLeaves()[i] )
             {
+                KdasmAssert( "Leaf Data Incorrect", 0 );
                 m_compareToFailId = compareTo->GetCompareToId();
                 return NULL;
             }
@@ -1921,12 +2028,17 @@ void KdasmDisassembler::CalculateStats( KdasmEncoding* encodingRoot, intptr_t en
 
     stats.m_headerData = KdasmEncodingHeader::HEADER_LENGTH;
 
-    m_pageWords    = (intptr_t)1 << (header->GetPageBits() - 1);
+    m_pageAddressMask = ~(((intptr_t)1 << (header->GetPageBits() - 1)) - 1);
+
+    // Used to calcualte cache-misses per-leaf node.
     m_encodingRoot = encodingRoot;
+    m_cacheMissDepth = 1;
 
     if( header->IsLeavesAtRoot() )
     {
         CalculateStatsLeavesFar( encodingRoot + KdasmEncodingHeader::HEADER_LENGTH, stats );
+        stats.m_headerData = 1;
+        stats.m_leafNodeFarCount = 1;
     }
     else
     {
@@ -1935,12 +2047,12 @@ void KdasmDisassembler::CalculateStats( KdasmEncoding* encodingRoot, intptr_t en
     }
 
     stats.m_totalEncodingData = stats.m_cuttingPlaneNodeCount + stats.m_cuttingPlaneExtraData
-                        + stats.m_leafHeaderCount    + stats.m_leafblockData
-                        + stats.m_leafNodeCount
-                        + stats.m_leafNodeFarCount   + stats.m_leafNodeFarExtraData
-                        + stats.m_jumpNodeCount
-                        + stats.m_jumpNodeFarCount   + stats.m_jumpNodeFarExtraData
-                        + stats.m_headerData;
+                              + stats.m_leafHeaderCount       + stats.m_leafblockData
+                              + stats.m_leafNodeCount
+                              + stats.m_leafNodeFarCount      + stats.m_leafNodeFarExtraData
+                              + stats.m_jumpNodeCount
+                              + stats.m_jumpNodeFarCount      + stats.m_jumpNodeFarExtraData
+                              + stats.m_headerData;
 
     stats.m_paddingData = encodingSize - stats.m_totalEncodingData;
 }
@@ -1958,16 +2070,29 @@ void KdasmDisassembler::CalculateStatsEncoding( KdasmEncoding* encoding, intptr_
 
                 ++stats.m_leafNodeCount;
                 stats.m_leafblockData += leafCount; // Technically extra data, but that confuses the point.
+                stats.m_totalCacheMissesForEachLeafNode += m_cacheMissDepth;
                 return;
             }
             case KdasmEncoding::OPCODE_LEAVES_FAR:
             {
                 intptr_t offset = encoding->UnpackFarOffset();
+                KdasmEncoding* encodingOffset = encoding + offset;
+
+                bool isCacheMiss = IsCacheMiss( encoding, encodingOffset );
+                if( isCacheMiss )
+                {
+                    ++m_cacheMissDepth;
+                }
 
                 ++stats.m_leafNodeFarCount;
                 stats.m_leafNodeFarExtraData += encoding->GetIsImmediateOffset() ? 0 : encoding->GetFarWordsCount();
 
-                CalculateStatsLeavesFar( encoding + offset, stats );
+                CalculateStatsLeavesFar( encodingOffset, stats );
+
+                if( isCacheMiss )
+                {
+                    --m_cacheMissDepth;
+                }
                 return;
             }
             case KdasmEncoding::OPCODE_JUMP:
@@ -1983,11 +2108,23 @@ void KdasmDisassembler::CalculateStatsEncoding( KdasmEncoding* encoding, intptr_
             case KdasmEncoding::OPCODE_JUMP_FAR:
             {
                 intptr_t offset = encoding->UnpackFarOffset();
+                KdasmEncoding* encodingOffset = encoding + offset;
+
+                bool isCacheMiss = IsCacheMiss( encoding, encodingOffset );
+                if( isCacheMiss )
+                {
+                    ++m_cacheMissDepth;
+                }
 
                 ++stats.m_jumpNodeFarCount;
                 stats.m_jumpNodeFarExtraData += encoding->GetIsImmediateOffset() ? 0 : encoding->GetFarWordsCount();
 
-                CalculateStatsEncoding( encoding + offset, 0, stats );
+                CalculateStatsEncoding( encodingOffset, 0, stats );
+
+                if( isCacheMiss )
+                {
+                    --m_cacheMissDepth;
+                }
                 return;
             }
         }
@@ -2017,12 +2154,13 @@ void KdasmDisassembler::CalculateStatsLeavesFar( KdasmEncoding* encoding, Encodi
 
     ++stats.m_leafHeaderCount;
     stats.m_leafblockData += leafCount;
+    stats.m_totalCacheMissesForEachLeafNode += m_cacheMissDepth;
 }
 
-// Tools code does not require correct alignment.
-KdasmEncoding* KdasmDisassembler::PageBaseAddress( KdasmEncoding* encoding )
+bool KdasmDisassembler::IsCacheMiss( KdasmEncoding* node, KdasmEncoding* subnode )
 {
-    intptr_t offset = encoding - m_encodingRoot;
-    intptr_t pageOffset = offset & ( m_pageWords - 1 );
-    return encoding - pageOffset;
+    intptr_t nodePage = (intptr_t)(node - m_encodingRoot) & m_pageAddressMask;
+    intptr_t subnodePage = (intptr_t)(subnode - m_encodingRoot) & m_pageAddressMask;
+    return nodePage != subnodePage;
 }
+

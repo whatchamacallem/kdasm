@@ -37,7 +37,7 @@ public:
     enum {
         NORMAL_X                            = 0x0000, 
         NORMAL_Y                            = 0x0001,
-        NORMAL_Z		                    = 0x0002,
+        NORMAL_Z                            = 0x0002,
         NORMAL_OPCODE                       = 0x0003,
         NORMAL_MASK                         = 0x0003,
         OPCODE_LEAVES                       = 0x0000,
@@ -207,7 +207,7 @@ public:
     PageBits GetPageBits( void ) const          { return (PageBits)((m_words[1] & (KdasmU16)PAGE_BITS_MASK) >> PAGE_BITS_SHIFT); }
 
     // internal
-    void Reset( void )							{ m_words[0] = VERSION_1; m_words[1] = 0; }
+    void Reset( void )                          { m_words[0] = VERSION_1; m_words[1] = 0; }
     void SetDistanceLength( KdasmU16 dl )       { m_words[1] |= (KdasmU16)DISTANCE_LENGTH_MASK & dl; }
     void SetIsLeavesAtRoot( bool b )            { m_words[1] |= b ? (KdasmU16)FLAG_LEAVES_AT_ROOT : 0; }
     void SetPageBits( PageBits pb )             { m_words[1] |= (KdasmU16)PAGE_BITS_MASK & ((KdasmU16)pb << PAGE_BITS_SHIFT); }
