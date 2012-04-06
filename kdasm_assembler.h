@@ -282,16 +282,18 @@ private:
     void Encode( KdasmAssemblerNode* root, KdasmEncodingHeader::PageBits pageBits, std::vector<KdasmEncoding>& result );
     void Clear( void );
 
-    ActivityCallback                    m_activityCallback;
-    void*                               m_activityData;
-    int                                 m_activityFrequency;
-    int                                 m_activityCounter;
+    ActivityCallback                        m_activityCallback;
+    void*                                   m_activityData;
+    int                                     m_activityFrequency;
+    int                                     m_activityCounter;
 
-    KdasmAssemblerPageAllocator         m_pageAllocator;
-    KdasmAssemblerNodeBreadthFirstQueue m_globalQueue;
-    KdasmAssemblerNodeBreadthFirstQueue m_pageQueue;
-    KdasmAssemblerPagePacker            m_pagePacker;
-    PagesBySize                         m_pagesBySize;
+    KdasmAssemblerPageAllocator             m_pageAllocator;
+    KdasmAssemblerNodeBreadthFirstQueue     m_globalQueue;
+    KdasmAssemblerNodeBreadthFirstQueue     m_pageQueue;
+    KdasmAssemblerPagePacker                m_pagePacker;
+    std::vector<KdasmAssemblerVirtualPage*> m_superpages;
+    std::vector<KdasmAssemblerVirtualPage*> m_failingPageSuperpages;
+    PagesBySize                             m_pagesBySize;
 };
 
 // ----------------------------------------------------------------------------

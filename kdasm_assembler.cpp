@@ -1663,26 +1663,25 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
         pgNodes[i]->SetVirtualPage( bin );
     }
   
-    std::vector<KdasmAssemblerVirtualPage*> superpages, failingPageSuperpages;
-    bin->FindSuperpages( superpages );
-    bin->AppendSuperpages( superpages, &pgNodes[0], pgNodeCount );
+    bin->FindSuperpages( m_superpages );
+    bin->AppendSuperpages( m_superpages, &pgNodes[0], pgNodeCount );
 
     // Test if bin and referring pages can encode within size limits.
     bool packOk = m_pagePacker.Pack( bin, false, &pgNodes[0], pgNodeCount );
     KdasmAssemblerVirtualPage* failingPage = NULL;
     if( packOk )
     {
-        for( size_t i=0; i < superpages.size(); ++i )
+        for( size_t i=0; i < m_superpages.size(); ++i )
         {
-            if( superpages[i] == pg )
+            if( m_superpages[i] == pg )
             {
                 continue;
             }
-            if( !m_pagePacker.Pack( superpages[i], false ) )
+            if( !m_pagePacker.Pack( m_superpages[i], false ) )
             {
                 if( failingPage == NULL )
                 {
-                    failingPage = superpages[i];
+                    failingPage = m_superpages[i];
                     KdasmAssertInternal( failingPage != bin );
                 }
                 else
@@ -1713,7 +1712,9 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
         }
         KdasmAssertInternal( superNode != NULL );
 
-        failingPage->RemoveNode( superNode );
+        failingPage->FindSuperpages( m_failingPageSuperpages );
+
+		failingPage->RemoveNode( superNode );
         bin->InsertNode( superNode );
 
         packOk = m_pagePacker.Pack( bin, false, &pgNodes[0], pgNodeCount );
@@ -1722,11 +1723,11 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
             packOk = m_pagePacker.Pack( failingPage, false );
             if( packOk )
             {
-                for( size_t i=0; i < superpages.size(); ++i )
+                for( size_t i=0; i < m_superpages.size(); ++i )
                 {
-                    if( pg != superpages[i] )
+                    if( pg != m_superpages[i] )
                     {
-                        if( !m_pagePacker.Pack( superpages[i], false ) )
+                        if( !m_pagePacker.Pack( m_superpages[i], false ) )
                         {
                             packOk = false;
                             break;
@@ -1735,13 +1736,11 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
                 }
                 if( packOk )
                 {
-                    bin->FindSuperpages( failingPageSuperpages );
-                    
-                    for( size_t i=0; i < failingPageSuperpages.size(); ++i )
+                    for( size_t i=0; i < m_failingPageSuperpages.size(); ++i )
                     {
-                        if( bin != failingPageSuperpages[i] && pg != failingPageSuperpages[i] )
+                        if( bin != m_failingPageSuperpages[i] && pg != m_failingPageSuperpages[i] )
                         {
-                            if( !m_pagePacker.Pack( failingPageSuperpages[i], false ) )
+                            if( !m_pagePacker.Pack( m_failingPageSuperpages[i], false ) )
                             {
                                 packOk = false;
                                 break;
@@ -1755,11 +1754,11 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
         {
             // Commit to modification of failing super page.
             packOk = m_pagePacker.Pack( failingPage, true );
-            for( size_t i=0; i < failingPageSuperpages.size(); ++i )
+            for( size_t i=0; i < m_failingPageSuperpages.size(); ++i )
             {
-                if( bin != failingPageSuperpages[i] && pg != failingPageSuperpages[i] )
+                if( bin != m_failingPageSuperpages[i] && pg != m_failingPageSuperpages[i] )
                 {
-                    packOk |= m_pagePacker.Pack( failingPageSuperpages[i], true );
+                    packOk |= m_pagePacker.Pack( m_failingPageSuperpages[i], true );
                 }
             }
             KdasmAssertInternal( packOk );
@@ -1780,9 +1779,9 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
         pgNodes.clear();
 
         bool packOk = m_pagePacker.Pack( bin, true );
-        for( size_t i=0; i < superpages.size(); ++i )
+        for( size_t i=0; i < m_superpages.size(); ++i )
         {
-            packOk |= m_pagePacker.Pack( superpages[i], true );
+            packOk |= m_pagePacker.Pack( m_superpages[i], true );
         }
         KdasmAssertInternal( packOk );
     }
