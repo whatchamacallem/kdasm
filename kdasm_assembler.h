@@ -109,15 +109,12 @@ public:
     void SetPhysicalPageCount( intptr_t n )                        { m_physicalPageCount = n; }
     void SetEncodingSize( intptr_t size )                          { m_encodingSize = size; }
     intptr_t GetEncodingSize( void ) const                         { return m_encodingSize; }
-    std::vector<KdasmAssemblerVirtualPage*>& GetSuperPages( void ) { return m_superPages; }
-    KdasmAssemblerVirtualPage* GetSuperPage( intptr_t i )          { return m_superPages[i]; }
-    std::vector<KdasmAssemblerVirtualPage*>& GetSubPages( void )   { return m_subPages; }
 
-	void BuildPageHierarchy( void );
-	void AppendPageHierarchy( KdasmAssemblerNode** additionalNodes, size_t additionalNodesCount );
-	bool ValidatePageHierarchy( void );
+    void FindSuperpages( std::vector<KdasmAssemblerVirtualPage*>& pages );
+    void AppendSuperpages( std::vector<KdasmAssemblerVirtualPage*>& pages, KdasmAssemblerNode** additionalNodes, size_t additionalNodesCount );
+    void FindSubpages( std::vector<KdasmAssemblerVirtualPage*>& pages );
 
-	static bool CompareByPhysicalPages( const KdasmAssemblerVirtualPage* a, const KdasmAssemblerVirtualPage* b );
+    static bool CompareByPhysicalPages( const KdasmAssemblerVirtualPage* a, const KdasmAssemblerVirtualPage* b );
     static bool CompareByPhysicalPagesReverse( const KdasmAssemblerVirtualPage* a, const KdasmAssemblerVirtualPage* b );
     static bool CompareByEncodingSize( const KdasmAssemblerVirtualPage* a, const KdasmAssemblerVirtualPage* b );
 
@@ -126,8 +123,6 @@ private:
     intptr_t                                m_physicalPageCount;
     std::vector<KdasmAssemblerNode*>        m_nodes;
     intptr_t                                m_encodingSize;
-    std::vector<KdasmAssemblerVirtualPage*> m_superPages;
-    std::vector<KdasmAssemblerVirtualPage*> m_subPages;
 };
 
 // ----------------------------------------------------------------------------
@@ -272,19 +267,19 @@ public:
 
 private:
     enum {
-        MAX_PAGE_MERGE_SCAN_DISTANCE = 8
+        MAX_PAGE_MERGE_SCAN_DISTANCE = 3
     };
 
     typedef std::vector<std::vector<KdasmAssemblerVirtualPage*> > PagesBySize;
 
     void TickActivity( void );
     void PackNextPage( void );
-    bool TryPackingPage( KdasmAssemblerVirtualPage* virtualPage );
-    void Encode( KdasmAssemblerNode* root, KdasmEncodingHeader::PageBits pageBits, std::vector<KdasmEncoding>& result );
+    void SubpageMerge( void );
     void BinPack( void );
     void BuildPagesBySize( intptr_t pageWords );
     intptr_t FindClosestPhysicalPage( KdasmAssemblerVirtualPage* bin, std::vector<KdasmAssemblerVirtualPage*>& pages );
     bool TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerVirtualPage* pg );
+    void Encode( KdasmAssemblerNode* root, KdasmEncodingHeader::PageBits pageBits, std::vector<KdasmEncoding>& result );
     void Clear( void );
 
     ActivityCallback                    m_activityCallback;

@@ -21,10 +21,12 @@
   <ItemGroup>
     <ClCompile Include="kdasm_assembler.cpp" />
     <ClCompile Include="kdasm_assembler_test.cpp" />
+    <ClCompile Include="kdasm_visualizer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="kdasm.h" />
     <ClInclude Include="kdasm_assembler.h" />
+    <ClInclude Include="kdasm_visualizer.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{2BEEA286-D57B-4AA0-9129-8F3956C2C33E}</ProjectGuid>

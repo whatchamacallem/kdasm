@@ -230,65 +230,47 @@ void KdasmAssemblerVirtualPage::RemoveNode( KdasmAssemblerNode* n )
     n->SetVirtualPage( NULL );
 }
 
-void KdasmAssemblerVirtualPage::BuildPageHierarchy( void )
+void KdasmAssemblerVirtualPage::FindSuperpages( std::vector<KdasmAssemblerVirtualPage*>& pages )
 {
-    m_superPages.clear();
-    m_subPages.clear();
-
-	if( !m_nodes.empty() )
-	{
-		AppendPageHierarchy( &m_nodes[0], m_nodes.size() );
-	}
+    pages.clear();
+    if( !m_nodes.empty() )
+    {
+        AppendSuperpages( pages, &m_nodes[0], m_nodes.size() );
+    }
 }
 
-void KdasmAssemblerVirtualPage::AppendPageHierarchy( KdasmAssemblerNode** additionalNodes, size_t additionalNodesCount )
+void KdasmAssemblerVirtualPage::AppendSuperpages( std::vector<KdasmAssemblerVirtualPage*>& pages, KdasmAssemblerNode** additionalNodes, size_t additionalNodesCount )
 {
     for( size_t i=0; i < additionalNodesCount; ++i )
     {
         KdasmAssemblerNode* n = additionalNodes[i]->GetNodeTemp()->m_supernode;
         if( n && n->GetVirtualPage() != this )
         {
-            if( std::find( m_superPages.begin(), m_superPages.end(), n->GetVirtualPage() ) == m_superPages.end() )
+            if( std::find( pages.begin(), pages.end(), n->GetVirtualPage() ) == pages.end() )
             {
-                m_superPages.push_back( n->GetVirtualPage() );
-            }
-        }
-
-        for( intptr_t j=0; j < 2; ++j )
-        {
-            KdasmAssemblerNode* sn = additionalNodes[i]->GetSubnode( j );
-            if( sn && sn->GetVirtualPage() != this )
-            {
-                if( std::find( m_subPages.begin(), m_subPages.end(), sn->GetVirtualPage() ) == m_subPages.end() )
-                {
-                    m_subPages.push_back( sn->GetVirtualPage() );
-                }
+                pages.push_back( n->GetVirtualPage() );
             }
         }
     }
 }
 
-bool KdasmAssemblerVirtualPage::ValidatePageHierarchy( void )
+void KdasmAssemblerVirtualPage::FindSubpages( std::vector<KdasmAssemblerVirtualPage*>& pages )
 {
-    for( size_t i=0; i < m_superPages.size(); ++i )
+    pages.clear();
+    for( size_t i=0; i < m_nodes.size(); ++i )
     {
-        if( std::find( m_superPages[i]->m_subPages.begin(), m_superPages[i]->m_subPages.end(), this )
-            == m_superPages[i]->m_subPages.end() )
+        for( intptr_t j=0; j < 2; ++j )
         {
-            return false;
+            KdasmAssemblerNode* sn = m_nodes[i]->GetSubnode( j );
+            if( sn && sn->GetVirtualPage() != this )
+            {
+                if( std::find( pages.begin(), pages.end(), sn->GetVirtualPage() ) == pages.end() )
+                {
+                    pages.push_back( sn->GetVirtualPage() );
+                }
+            }
         }
     }
-
-    for( size_t i=0; i < m_subPages.size(); ++i )
-    {
-        if( std::find( m_subPages[i]->m_superPages.begin(), m_subPages[i]->m_superPages.end(), this )
-            == m_subPages[i]->m_superPages.end() )
-        {
-            return false;
-        }
-    }
-
-    return m_nodes.size() == 0 || m_physicalPageStart == 0 || !m_superPages.empty();
 }
 
 bool KdasmAssemblerVirtualPage::CompareByPhysicalPages( const KdasmAssemblerVirtualPage* a, const KdasmAssemblerVirtualPage* b ) 
@@ -1391,6 +1373,9 @@ void KdasmAssembler::Assemble( KdasmAssemblerNode* root, KdasmEncodingHeader::Pa
     }
 
     m_pageAllocator.CompactAndFreePhysicalPages();
+    SubpageMerge();
+    
+    m_pageAllocator.CompactAndFreePhysicalPages();
     BinPack();
 
     m_pageAllocator.CompactAndFreePhysicalPages();
@@ -1467,32 +1452,49 @@ void KdasmAssembler::PackNextPage( void )
     }
 }
 
-void KdasmAssembler::Encode( KdasmAssemblerNode* root, KdasmEncodingHeader::PageBits pageBits, std::vector<KdasmEncoding>& result )
+void KdasmAssembler::SubpageMerge( void )
 {
-    size_t expectedSize = m_pageAllocator.AllocatedSize();
-    result.reserve( expectedSize );
-
     std::vector<KdasmAssemblerVirtualPage*>& pages = m_pageAllocator.GetAllocatedPages();
-    for( size_t i=0; i < pages.size(); ++i )
+    if( pages.size() <= 2 )
     {
-        std::vector<KdasmEncoding>& pageEncoding = m_pagePacker.Encode( pages[i] );
-        result.insert( result.end(), pageEncoding.begin(), pageEncoding.end() );
-        TickActivity();
+        return;
     }
 
-    KdasmAssertInternal( result.size() == expectedSize );
-    KdasmAssertInternal( pages[0]->GetNodes().front() == root );
+    std::vector<KdasmAssemblerVirtualPage*> depthFirstStack;
+    depthFirstStack.reserve( 16 );
+    depthFirstStack.push_back( pages[0] );
 
-    KdasmEncodingHeader h;
-    h.Reset();
-    h.SetDistanceLength( (KdasmU16)root->GetDistanceLength() );
-    h.SetIsLeavesAtRoot( !root->HasSubnodes() );
-    h.SetPageBits( pageBits );
+    KdasmAssemblerVirtualPage* bin = NULL;
+    std::vector<KdasmAssemblerVirtualPage*> subpages;
 
-    for( int i=0; i < KdasmEncodingHeader::HEADER_LENGTH; ++i )
+    while( !depthFirstStack.empty() )
     {
-        KdasmAssertInternal( result[i].GetRaw() == KdasmEncoding::PAD_VALUE );
-        result[i].SetRaw( h.GetRaw( i ) );
+        KdasmAssemblerVirtualPage* pg = depthFirstStack.back();
+        depthFirstStack.pop_back();
+
+        pg->FindSubpages( subpages );
+        if( !subpages.empty() )
+        {
+            depthFirstStack.insert( depthFirstStack.end(), subpages.rbegin(), subpages.rend() );
+        }
+        else
+        {
+            if( bin == NULL )
+            {
+                bin = pg;
+            }
+            else
+            {
+                if( TryBinPack( bin, pg ) )
+                {
+                    m_pageAllocator.Recycle( pg );
+                }
+                else
+                {
+                    bin = pg;
+                }
+            }
+        }
     }
 }
 
@@ -1511,12 +1513,6 @@ void KdasmAssembler::BinPack( void )
     ptrdiff_t compactPhysicalPagesCounter = 0;
     for( ptrdiff_t i=pageWords; i > 0; --i )
     {
-#ifdef KDASM_INTERNAL_VALIDATION
-        for( size_t j=0; j < pages.size(); ++j )
-        {
-            KdasmAssertDebug( pages[j]->ValidatePageHierarchy() );
-        }
-#endif
         while( !m_pagesBySize[i].empty() )
         {
             KdasmAssemblerVirtualPage* bin = m_pagesBySize[i].back();
@@ -1545,8 +1541,6 @@ void KdasmAssembler::BinPack( void )
 
                 while( !currentPagesBySize.empty() )
                 {
-                    TickActivity();
-
                     KdasmAssemblerVirtualPage* pg = currentPagesBySize[pivot + distance];
 
                     if( TryBinPack( bin, pg ) )
@@ -1613,7 +1607,6 @@ void KdasmAssembler::BuildPagesBySize( intptr_t pageWords )
 
     // Skip bin packing the root page.  It should be well packed anyway.
     std::vector<KdasmAssemblerVirtualPage*>& pages = m_pageAllocator.GetAllocatedPages();
-    pages[0]->BuildPageHierarchy();
 
     // Queue bins earlier in the address space before those that come after.  This gives
     // pages closer to the root of the tree a chance to gather nearby nodes first.
@@ -1621,8 +1614,6 @@ void KdasmAssembler::BuildPagesBySize( intptr_t pageWords )
     for( size_t i=pages.size()-1; i >= 1; --i )
     {
         KdasmAssemblerVirtualPage* pg = pages[i];
-        pg->BuildPageHierarchy();
-
         if( pg->GetEncodingSize() >= (pageWords + 1) )
         {
             m_pagesBySize[pageWords].push_back( pg );
@@ -1662,31 +1653,36 @@ intptr_t KdasmAssembler::FindClosestPhysicalPage( KdasmAssemblerVirtualPage* bin
 
 bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerVirtualPage* pg )
 {
-    std::vector<KdasmAssemblerNode*>& pgNodes = pg->GetNodes();
+    TickActivity();
+
+	std::vector<KdasmAssemblerNode*>& pgNodes = pg->GetNodes();
     size_t pgNodeCount = pgNodes.size();
 
     for( size_t i=0; i < pgNodeCount; ++i )
     {
         pgNodes[i]->SetVirtualPage( bin );
     }
-    bin->AppendPageHierarchy( &pgNodes[0], pgNodeCount );
+  
+    std::vector<KdasmAssemblerVirtualPage*> superpages, failingPageSuperpages;
+    bin->FindSuperpages( superpages );
+    bin->AppendSuperpages( superpages, &pgNodes[0], pgNodeCount );
 
     // Test if bin and referring pages can encode within size limits.
     bool packOk = m_pagePacker.Pack( bin, false, &pgNodes[0], pgNodeCount );
     KdasmAssemblerVirtualPage* failingPage = NULL;
     if( packOk )
     {
-        for( size_t i=0; i < bin->GetSuperPages().size(); ++i )
+        for( size_t i=0; i < superpages.size(); ++i )
         {
-            if( bin->GetSuperPage( i ) == pg )
+            if( superpages[i] == pg )
             {
                 continue;
             }
-            if( !m_pagePacker.Pack( bin->GetSuperPage( i ), false ) )
+            if( !m_pagePacker.Pack( superpages[i], false ) )
             {
                 if( failingPage == NULL )
                 {
-                    failingPage = bin->GetSuperPage( i );
+                    failingPage = superpages[i];
                     KdasmAssertInternal( failingPage != bin );
                 }
                 else
@@ -1726,11 +1722,11 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
             packOk = m_pagePacker.Pack( failingPage, false );
             if( packOk )
             {
-                for( size_t i=0; i < bin->GetSuperPages().size(); ++i )
+                for( size_t i=0; i < superpages.size(); ++i )
                 {
-                    if( pg != bin->GetSuperPage( i ) )
+                    if( pg != superpages[i] )
                     {
-                        if( !m_pagePacker.Pack( bin->GetSuperPage( i ), false ) )
+                        if( !m_pagePacker.Pack( superpages[i], false ) )
                         {
                             packOk = false;
                             break;
@@ -1739,11 +1735,13 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
                 }
                 if( packOk )
                 {
-                    for( size_t i=0; i < failingPage->GetSuperPages().size(); ++i )
+                    bin->FindSuperpages( failingPageSuperpages );
+                    
+                    for( size_t i=0; i < failingPageSuperpages.size(); ++i )
                     {
-                        if( bin != failingPage->GetSuperPage( i ) && pg != failingPage->GetSuperPage( i ) )
+                        if( bin != failingPageSuperpages[i] && pg != failingPageSuperpages[i] )
                         {
-                            if( !m_pagePacker.Pack( failingPage->GetSuperPage( i ), false ) )
+                            if( !m_pagePacker.Pack( failingPageSuperpages[i], false ) )
                             {
                                 packOk = false;
                                 break;
@@ -1756,17 +1754,15 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
         if( packOk )
         {
             // Commit to modification of failing super page.
-            bool packOk = m_pagePacker.Pack( failingPage, true );
-            for( size_t i=0; i < failingPage->GetSuperPages().size(); ++i )
+            packOk = m_pagePacker.Pack( failingPage, true );
+            for( size_t i=0; i < failingPageSuperpages.size(); ++i )
             {
-                if( bin != failingPage->GetSuperPage( i ) && pg != failingPage->GetSuperPage( i ) )
+                if( bin != failingPageSuperpages[i] && pg != failingPageSuperpages[i] )
                 {
-                    packOk |= m_pagePacker.Pack( failingPage->GetSuperPage( i ), true );
+                    packOk |= m_pagePacker.Pack( failingPageSuperpages[i], true );
                 }
             }
             KdasmAssertInternal( packOk );
-
-            failingPage->BuildPageHierarchy();
         }
         else
         {
@@ -1782,20 +1778,13 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
         binNodes.insert( binNodes.end(), pgNodes.begin(), pgNodes.end() );
 
         pgNodes.clear();
-        pg->BuildPageHierarchy();
 
         bool packOk = m_pagePacker.Pack( bin, true );
-        for( size_t i=0; i < bin->GetSuperPages().size(); ++i )
+        for( size_t i=0; i < superpages.size(); ++i )
         {
-            bin->GetSuperPages()[i]->BuildPageHierarchy();
-            packOk |= m_pagePacker.Pack( bin->GetSuperPages()[i], true );
+            packOk |= m_pagePacker.Pack( superpages[i], true );
         }
         KdasmAssertInternal( packOk );
-
-        for( size_t i=0; i < bin->GetSubPages().size(); ++i )
-        {
-            bin->GetSubPages()[i]->BuildPageHierarchy();
-        }
     }
     else
     {
@@ -1804,11 +1793,38 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
         {
             pgNodes[i]->SetVirtualPage( pg );
         }
-
-        bin->BuildPageHierarchy();
     }
 
     return packOk;
+}
+
+void KdasmAssembler::Encode( KdasmAssemblerNode* root, KdasmEncodingHeader::PageBits pageBits, std::vector<KdasmEncoding>& result )
+{
+    size_t expectedSize = m_pageAllocator.AllocatedSize();
+    result.reserve( expectedSize );
+
+    std::vector<KdasmAssemblerVirtualPage*>& pages = m_pageAllocator.GetAllocatedPages();
+    for( size_t i=0; i < pages.size(); ++i )
+    {
+        std::vector<KdasmEncoding>& pageEncoding = m_pagePacker.Encode( pages[i] );
+        result.insert( result.end(), pageEncoding.begin(), pageEncoding.end() );
+        TickActivity();
+    }
+
+    KdasmAssertInternal( result.size() == expectedSize );
+    KdasmAssertInternal( pages[0]->GetNodes().front() == root );
+
+    KdasmEncodingHeader h;
+    h.Reset();
+    h.SetDistanceLength( (KdasmU16)root->GetDistanceLength() );
+    h.SetIsLeavesAtRoot( !root->HasSubnodes() );
+    h.SetPageBits( pageBits );
+
+    for( int i=0; i < KdasmEncodingHeader::HEADER_LENGTH; ++i )
+    {
+        KdasmAssertInternal( result[i].GetRaw() == KdasmEncoding::PAD_VALUE );
+        result[i].SetRaw( h.GetRaw( i ) );
+    }
 }
 
 void KdasmAssembler::Clear( void )

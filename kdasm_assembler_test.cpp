@@ -3,6 +3,7 @@
 // Project Homepage: http://code.google.com/p/kdasm/
 
 #include "kdasm_assembler.h"
+#include "kdasm_visualizer.h"
 
 #include <stdio.h>
 #include <vector>
@@ -37,11 +38,33 @@ public:
     // Test cases
     void TestLeavesAtRoot( KdasmAssembler& kdasmAssembler, KdasmDisassembler& kdasmDisassembler );
     void TestRandom( KdasmAssembler& kdasmAssembler, KdasmDisassembler& kdasmDisassembler );
+    void TestVisualizer( KdasmAssembler& kdasmAssembler );
 
 private:
-    KdasmU16        m_randSeed;
-    intptr_t        m_activityCounter;
-    intptr_t        m_activityIncrement;
+    KdasmU16                        m_randSeed;
+    intptr_t                        m_activityCounter;
+    intptr_t                        m_activityIncrement;
+    static KdasmTestRandomSettings  m_settings[];
+};
+
+// ----------------------------------------------------------------------------
+
+KdasmTest::KdasmTestRandomSettings KdasmTest::m_settings[] =
+{
+    // maxNodes, maxLeaves, distanceLength, percentSubnodes, percentEmpty,   seed, pageBits
+    {      2000,        10,              2,              70,           50, 0x7988, KdasmEncodingHeader::PAGE_BITS_64B  },
+    {      3000,        10,              1,              70,           50, 0xe751, KdasmEncodingHeader::PAGE_BITS_64B  },
+    {      4000,        10,              1,              70,           50, 0x5a30, KdasmEncodingHeader::PAGE_BITS_64B  },
+    {      2000,         7,              1,              77,           30, 0x8a15, KdasmEncodingHeader::PAGE_BITS_128B },
+    {      1000,       100,              1,              70,           50, 0x61c6, KdasmEncodingHeader::PAGE_BITS_64B  },
+    {       300,        10,              4,              73,           20, 0x73e5, KdasmEncodingHeader::PAGE_BITS_32B  },
+    {     10000,         8,              1,              73,           20, 0xd8e2, KdasmEncodingHeader::PAGE_BITS_64B  },
+    {    100000,         8,              1,              73,           20, 0xf5cc, KdasmEncodingHeader::PAGE_BITS_64B  },
+// Warning: The debug memory heap chokes on this test.
+#if !defined(_DEBUG)
+    {   1000000,         8,              1,              73,           20, 0x2152, KdasmEncodingHeader::PAGE_BITS_64B  },
+#endif
+    { 0 },
 };
 
 // ----------------------------------------------------------------------------
@@ -218,32 +241,16 @@ void KdasmTest::TestLeavesAtRoot( KdasmAssembler& kdasmAssembler, KdasmDisassemb
 
 void KdasmTest::TestRandom( KdasmAssembler& kdasmAssembler, KdasmDisassembler& kdasmDisassembler )
 {
-    static const KdasmTestRandomSettings settings[] = {
-        // maxNodes, maxLeaves, distanceLength, percentSubnodes, percentEmpty,   seed, pageBits
-        {      2000,         7,              1,              77,           30, 0x8a15, KdasmEncodingHeader::PAGE_BITS_128B },
-        {      1000,       100,              1,              70,           50, 0x61c6, KdasmEncodingHeader::PAGE_BITS_64B  },
-        {       300,        10,              4,              73,           20, 0x73e5, KdasmEncodingHeader::PAGE_BITS_32B  },
-        {     10000,         8,              1,              73,           20, 0xd8e2, KdasmEncodingHeader::PAGE_BITS_64B  },
-        {    100000,         8,              1,              73,           20, 0xf5cc, KdasmEncodingHeader::PAGE_BITS_64B  },
-// The debug memory heap kills this test.
-#if !defined(_DEBUG)
-        {   1000000,         8,              1,              73,           20, 0x2152, KdasmEncodingHeader::PAGE_BITS_64B  },
-#endif
-        {      2000,        10,              2,              70,           50, 0x7988, KdasmEncodingHeader::PAGE_BITS_64B  },
-        {      3000,        10,              1,              70,           50, 0xe751, KdasmEncodingHeader::PAGE_BITS_64B  },
-        {      4000,        10,              1,              70,           50, 0x5a30, KdasmEncodingHeader::PAGE_BITS_64B  },
-    };
-
-    for( int i=0; i < (sizeof settings / sizeof *settings); ++i )
+    for( int i=0; m_settings[i].m_maxNodes != 0; ++i )
     {
-        printf( "-----\nTest random %x.", settings[i].m_seed );
+        printf( "-----\nTest random %x.", m_settings[i].m_seed );
 
-        m_randSeed = settings[i].m_seed;
+        m_randSeed = m_settings[i].m_seed;
 
-        KdasmAssemblerNode* random = GenerateRandomNodes( settings[i] );
+        KdasmAssemblerNode* random = GenerateRandomNodes( m_settings[i] );
 
         std::vector<KdasmEncoding> randomResult;
-        kdasmAssembler.Assemble( random, settings[i].m_pageBits, randomResult );
+        kdasmAssembler.Assemble( random, m_settings[i].m_pageBits, randomResult );
 
         KdasmAssemblerNode* randomDisassembly = kdasmDisassembler.Disassemble( &randomResult[0], random );
         KdasmAssert( "Disassembly failed", randomDisassembly );
@@ -261,25 +268,45 @@ void KdasmTest::TestRandom( KdasmAssembler& kdasmAssembler, KdasmDisassembler& k
         intptr_t leafNodeCount = stats.m_leafNodeCount + stats.m_leafNodeFarCount;
 
         printf( "\nStats (compare in context of random generation settings):\n" );
-        printf( "\t %8d totalEncodingData\n", stats.m_totalEncodingData );
-        printf( "\t %8d paddingData\n", stats.m_paddingData );
-        printf( "\t %8d headerData\n",  stats.m_headerData );
-        printf( "\t %8d cuttingPlaneNodeCount\n", stats.m_cuttingPlaneNodeCount );
-        printf( "\t %8d cuttingPlaneExtraData\n", stats.m_cuttingPlaneExtraData );
-        printf( "\t %8d leafHeaderCount\n", stats.m_leafHeaderCount );
-        printf( "\t %8d leafblockData\n", stats.m_leafblockData );
-        printf( "\t %8d leafNodeCount\n", stats.m_leafNodeCount );
-        printf( "\t %8d leafNodeFarCount\n", stats.m_leafNodeFarCount );
-        printf( "\t %8d leafNodeFarExtraData\n", stats.m_leafNodeFarExtraData );
-        printf( "\t %8d jumpNodeCount\n", stats.m_jumpNodeCount );
-        printf( "\t %8d jumpNodeFarCount\n", stats.m_jumpNodeFarCount );
-        printf( "\t %8d jumpNodeFarExtraData\n", stats.m_jumpNodeFarExtraData );
+        printf( "     %8d totalEncodingData\n", stats.m_totalEncodingData );
+        printf( "     %8d paddingData\n", stats.m_paddingData );
+        printf( "     %8d headerData\n",  stats.m_headerData );
+        printf( "     %8d cuttingPlaneNodeCount\n", stats.m_cuttingPlaneNodeCount );
+        printf( "     %8d cuttingPlaneExtraData\n", stats.m_cuttingPlaneExtraData );
+        printf( "     %8d leafHeaderCount\n", stats.m_leafHeaderCount );
+        printf( "     %8d leafblockData\n", stats.m_leafblockData );
+        printf( "     %8d leafNodeCount\n", stats.m_leafNodeCount );
+        printf( "     %8d leafNodeFarCount\n", stats.m_leafNodeFarCount );
+        printf( "     %8d leafNodeFarExtraData\n", stats.m_leafNodeFarExtraData );
+        printf( "     %8d jumpNodeCount\n", stats.m_jumpNodeCount );
+        printf( "     %8d jumpNodeFarCount\n", stats.m_jumpNodeFarCount );
+        printf( "     %8d jumpNodeFarExtraData\n", stats.m_jumpNodeFarExtraData );
 
         printf( "%d nodes, %d leafnodes\n", nodeCount, leafNodeCount );
         printf( "%f bytes per-node, without leaf data\n", (float)(nodeDataWithPadding)/(float)(nodeCount) );
         printf( "%f bytes per-node, without leaf data or padding\n", (float)(nodeDataNoPadding)/(float)(nodeCount) );
         printf( "%f average cache-misses per-leaf node\n", (float)(stats.m_totalCacheMissesForEachLeafNode)/(float)(leafNodeCount) );
     }
+}
+
+void KdasmTest::TestVisualizer( KdasmAssembler& kdasmAssembler )
+{
+    KdasmTestRandomSettings& settings = m_settings[1]; // Use a graph that already has statistics.
+    
+    printf( "-----\nTest visualizer %x.", settings.m_seed );
+
+    m_randSeed = settings.m_seed;
+    KdasmAssemblerNode* random = GenerateRandomNodes( settings );
+
+    std::vector<KdasmEncoding> randomResult;
+    kdasmAssembler.Assemble( random, settings.m_pageBits, randomResult );
+
+    FILE* f = ::fopen( "kdasmgraph.dot", "w" );
+    KdasmVisualizer kdasmVisualizer;
+    kdasmVisualizer.Visualize( &randomResult[0], f );
+    ::fclose( f );
+
+    delete random;
 }
 
 int main( void )
@@ -294,6 +321,7 @@ int main( void )
 
     kdasmTest.TestRandom( kdasmAssembler, kdasmDisassembler );
     kdasmTest.TestLeavesAtRoot( kdasmAssembler, kdasmDisassembler );
+    kdasmTest.TestVisualizer( kdasmAssembler );
     printf( "Done.\n" );
 
     return 0;
