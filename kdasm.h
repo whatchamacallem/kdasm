@@ -28,66 +28,66 @@
 typedef unsigned short KdasmU16;
 
 // ----------------------------------------------------------------------------
-// KdasmEncoding is an encoding of a cutting plane, a jump statement or leaves.
+// KdasmEncoding is an encoding of a k-d tree node cutting plane, jump statement or leaves.
 // See Encoding Specification: http://goo.gl/3sU5N.
 
 class KdasmEncoding
 {
 public:
     enum {
-        NORMAL_X                            = 0x0000, 
-        NORMAL_Y                            = 0x0001,
-        NORMAL_Z                            = 0x0002,
-        NORMAL_OPCODE                       = 0x0003,
-        NORMAL_MASK                         = 0x0003,
-        OPCODE_LEAVES                       = 0x0000,
-        OPCODE_LEAVES_FAR                   = 0x0004,
-        OPCODE_JUMP                         = 0x0008,
-        OPCODE_JUMP_FAR                     = 0x000c,
+        NORMAL_X                       = 0x0000, 
+        NORMAL_Y                       = 0x0001,
+        NORMAL_Z                       = 0x0002,
+        NORMAL_OPCODE                  = 0x0003,
+        NORMAL_MASK                    = 0x0003,
+        OPCODE_LEAVES                  = 0x0000,
+        OPCODE_LEAVES_FAR              = 0x0004,
+        OPCODE_JUMP                    = 0x0008,
+        OPCODE_JUMP_FAR                = 0x000c,
         // With a distance length of 1 the value must fit in DISTANCE_IMMEDIATE_MASK and be less than DISTANCE_IMMEDIATE_MAX.
-        DISTANCE_IMMEDIATE_MASK             = 0xfff0,
-        DISTANCE_IMMEDIATE_MAX              = 0xffe0,
+        DISTANCE_IMMEDIATE_MASK        = 0xfff0,
+        DISTANCE_IMMEDIATE_MAX         = 0xffe0,
         // Due to quantization, an immediate cutting plane has this width.
-        DISTANCE_IMMEDIATE_PLANE_WIDTH      = 0x0010,
+        DISTANCE_IMMEDIATE_PLANE_WIDTH = 0x0010,
         // With a distance length greater than 1 this is the max value of the first word.
-        DISTANCE_PREFIX_MAX                 = 0x001f,
-        LEAF_WORD_LENGTH_MAX                = 0x001f,
-        TREE_INDEX_MAX                      = 0x001f,
-        IMMEDIATE_OFFSET_MAX                = 0x03ff,   // Max absolute value.  Negative values allowed.
-        LEAF_COUNT_OVERFLOW                 = 0xffff,   // An embedded header in the leaf data is required beyond this.
-        PAD_VALUE                           = 0xcccc    // Impossible x axis cut with both stop bits set.
+        DISTANCE_PREFIX_MAX            = 0x001f,
+        LEAF_WORD_LENGTH_MAX           = 0x001f,
+        TREE_INDEX_MAX                 = 0x001f,
+        IMMEDIATE_OFFSET_MAX           = 0x03ff,   // Max absolute value.  Negative values allowed.
+        LEAF_COUNT_OVERFLOW            = 0xffff,   // An embedded header in the leaf data is required beyond this.
+        PAD_VALUE                      = 0xcccc    // Impossible x axis cut with both stop bits set.
     };
 
-    KdasmU16 GetRaw( void ) const                   { return m_word; }
-    KdasmU16 GetNomal( void ) const                 { return m_word & (KdasmU16)NORMAL_MASK; }
-    bool GetStop0( void ) const                     { return (m_word & (KdasmU16)STOP_BIT_0) != (KdasmU16)0; }
-    bool GetStop1( void ) const                     { return (m_word & (KdasmU16)STOP_BIT_1) != (KdasmU16)0; }
-    KdasmU16 GetDistanceImmediate( void ) const     { return m_word & (KdasmU16)DISTANCE_IMMEDIATE_MASK; }
-    KdasmU16 GetDistancePrefix( void ) const        { return m_word >> DISTANCE_PREFIX_SHIFT; }
-    KdasmU16 GetOpcode( void ) const                { return m_word & (KdasmU16)OPCODE_MASK; }
-    bool GetIsImmediateOffset( void ) const         { return (m_word & (KdasmU16)IMMEDIATE_BIT) != (KdasmU16)0; }
-    KdasmU16 GetImmediateOffset( void ) const       { return m_word >> IMMEDIATE_SHIFT; }
-    KdasmU16 GetFarWordsCount( void ) const         { return (m_word & (KdasmU16)WORDS_COUNT_MASK) >> WORDS_COUNT_SHIFT; }
-    KdasmU16 GetFarWordsOffset( void ) const        { return m_word >> WORDS_OFFSET_SHIFT; }
-    KdasmU16 GetOffset( void ) const                { return (m_word & (KdasmU16)OFFSET_MASK) >> OFFSET_SHIFT; }
-    KdasmU16 GetLength( void ) const                { return m_word >> LENGTH_SHIFT; }
-    KdasmU16 GetTreeIndexStart( void ) const        { return m_word >> TREE_INDEX_START_SHIFT; }
+    KdasmU16 GetRaw( void ) const               { return m_word; }
+    KdasmU16 GetNomal( void ) const             { return m_word & (KdasmU16)NORMAL_MASK; }
+    bool GetStop0( void ) const                 { return (m_word & (KdasmU16)STOP_BIT_0) != (KdasmU16)0; }
+    bool GetStop1( void ) const                 { return (m_word & (KdasmU16)STOP_BIT_1) != (KdasmU16)0; }
+    KdasmU16 GetDistanceImmediate( void ) const { return m_word & (KdasmU16)DISTANCE_IMMEDIATE_MASK; }
+    KdasmU16 GetDistancePrefix( void ) const    { return m_word >> DISTANCE_PREFIX_SHIFT; }
+    KdasmU16 GetOpcode( void ) const            { return m_word & (KdasmU16)OPCODE_MASK; }
+    bool GetIsImmediateOffset( void ) const     { return (m_word & (KdasmU16)IMMEDIATE_BIT) != (KdasmU16)0; }
+    KdasmU16 GetImmediateOffset( void ) const   { return m_word >> IMMEDIATE_SHIFT; }
+    KdasmU16 GetFarWordsCount( void ) const     { return (m_word & (KdasmU16)WORDS_COUNT_MASK) >> WORDS_COUNT_SHIFT; }
+    KdasmU16 GetFarWordsOffset( void ) const    { return m_word >> WORDS_OFFSET_SHIFT; }
+    KdasmU16 GetOffset( void ) const            { return (m_word & (KdasmU16)OFFSET_MASK) >> OFFSET_SHIFT; }
+    KdasmU16 GetLength( void ) const            { return m_word >> LENGTH_SHIFT; }
+    KdasmU16 GetTreeIndexStart( void ) const    { return m_word >> TREE_INDEX_START_SHIFT; }
 
-    void SetRaw( KdasmU16 x )                       { m_word = x; }
-    KdasmU16* Ptr( void )                           { return &m_word; }
-    void SetNomal( KdasmU16 n )                     { m_word = (m_word & ~(KdasmU16)NORMAL_MASK) | ((KdasmU16)NORMAL_MASK & n); }
-    void SetStop0( bool b )                         { SetBool( b, STOP_BIT_0 ); }
-    void SetStop1( bool b )                         { SetBool( b, STOP_BIT_1 ); }
-    void SetDistanceImmediate( KdasmU16 d )         { m_word = (m_word & ~(KdasmU16)DISTANCE_IMMEDIATE_MASK) | ((KdasmU16)DISTANCE_IMMEDIATE_MASK & d); }
-    void SetDistancePrefix( KdasmU16 n )            { SetNShift( n, DISTANCE_PREFIX_SHIFT ); }
-    void SetOpcode( KdasmU16 op )                   { m_word = (m_word & ~(KdasmU16)OPCODE_MASK) | ((KdasmU16)OPCODE_MASK & op); }
-    void SetIsImmediateOffset( bool b )             { SetBool( b, IMMEDIATE_BIT ); }
-    void SetImmediateOffset( KdasmU16 n )           { SetNShift( n, IMMEDIATE_SHIFT ); }
-    void SetFarWordsCount( KdasmU16 n )             { SetNShiftAndMask( n, WORDS_COUNT_SHIFT, WORDS_COUNT_MASK ); }
-    void SetFarWordsOffset( KdasmU16 n )            { SetNShift( n, WORDS_OFFSET_SHIFT ); }
-    void SetOffset( KdasmU16 o )                    { SetNShiftAndMask( o, OFFSET_SHIFT, OFFSET_MASK ); }
-    void SetLength( KdasmU16 n )                    { SetNShift( n, LENGTH_SHIFT ); }
-    void SetTreeIndexStart( KdasmU16 n )            { SetNShift( n, TREE_INDEX_START_SHIFT ); }
+    void SetRaw( KdasmU16 x )                   { m_word = x; }
+    KdasmU16* Ptr( void )                       { return &m_word; }
+    void SetNomal( KdasmU16 n )                 { m_word = (m_word & ~(KdasmU16)NORMAL_MASK) | ((KdasmU16)NORMAL_MASK & n); }
+    void SetStop0( bool b )                     { SetBool( b, STOP_BIT_0 ); }
+    void SetStop1( bool b )                     { SetBool( b, STOP_BIT_1 ); }
+    void SetDistanceImmediate( KdasmU16 d )     { m_word = (m_word & ~(KdasmU16)DISTANCE_IMMEDIATE_MASK) | ((KdasmU16)DISTANCE_IMMEDIATE_MASK & d); }
+    void SetDistancePrefix( KdasmU16 n )        { SetNShift( n, DISTANCE_PREFIX_SHIFT ); }
+    void SetOpcode( KdasmU16 op )               { m_word = (m_word & ~(KdasmU16)OPCODE_MASK) | ((KdasmU16)OPCODE_MASK & op); }
+    void SetIsImmediateOffset( bool b )         { SetBool( b, IMMEDIATE_BIT ); }
+    void SetImmediateOffset( KdasmU16 n )       { SetNShift( n, IMMEDIATE_SHIFT ); }
+    void SetFarWordsCount( KdasmU16 n )         { SetNShiftAndMask( n, WORDS_COUNT_SHIFT, WORDS_COUNT_MASK ); }
+    void SetFarWordsOffset( KdasmU16 n )        { SetNShift( n, WORDS_OFFSET_SHIFT ); }
+    void SetOffset( KdasmU16 o )                { SetNShiftAndMask( o, OFFSET_SHIFT, OFFSET_MASK ); }
+    void SetLength( KdasmU16 n )                { SetNShift( n, LENGTH_SHIFT ); }
+    void SetTreeIndexStart( KdasmU16 n )        { SetNShift( n, TREE_INDEX_START_SHIFT ); }
 
     // Convert floating point value between 0 and 1 to fixed point.
     static KdasmU16 PackDistanceImmediate( float d01 )
@@ -107,23 +107,25 @@ public:
     // For distanceLength > 1.  The number of words used to encode distance is constant.
     template<int distanceLength> intptr_t UnpackDistance( void ) const
     {
-        intptr_t distance = UnpackUnsignedWords( distanceLength - 1, UnpackOffset() );
+        intptr_t distance = UnpackWords( distanceLength - 1, GetOffset() );
         return distance | ( (intptr_t)( m_word & (KdasmU16)DISTANCE_PREFIX_MASK ) << ( 16 * ( distanceLength - 1 ) - DISTANCE_PREFIX_SHIFT ) );
     }
 
-    intptr_t UnpackOffset( void ) const
+    intptr_t GetOffsetSigned( void ) const
     {
         return ( (intptr_t)GetOffset() ^ (intptr_t)OFFSET_SIGN_BIT ) - (intptr_t)OFFSET_SIGN_BIT;
     }
 
-    intptr_t UnpackFarOffset( void ) const
+    intptr_t GetFarOffset( void ) const
     {
-        // Uses "x^high_bit-high_bit" trick to sign extend the high bit.
         if( GetIsImmediateOffset() )
         {
             return ( (intptr_t)GetImmediateOffset() ^ (intptr_t)IMMEDIATE_SIGN_BIT ) - (intptr_t)IMMEDIATE_SIGN_BIT;
         }
-        return UnpackSignedWords( GetFarWordsCount(), ( GetFarWordsOffset() ^ WORDS_OFFSET_SIGN_BIT ) - WORDS_OFFSET_SIGN_BIT );
+
+        KdasmU16 wordCount = GetFarWordsCount();
+        intptr_t signBit = (intptr_t)1 << (wordCount * 16 - 1);
+        return ( UnpackWords( wordCount, GetFarWordsOffset() ) ^ signBit ) - signBit;
     }
 
 private:
@@ -137,7 +139,6 @@ private:
         WORDS_COUNT_SHIFT           = 5,
         WORDS_COUNT_MASK            = 0x00e0,
         WORDS_OFFSET_SHIFT          = 8,
-        WORDS_OFFSET_SIGN_BIT       = 0x0100,
         OFFSET_SHIFT                = 4,        // OPCODE_LEAVES, OPCODE_JUMP
         OFFSET_MASK                 = 0x07f0,
         OFFSET_SIGN_BIT             = 0x0040,
@@ -162,7 +163,7 @@ private:
         m_word = (m_word & ~mask) | (b ? mask : 0);
     }
 
-    intptr_t UnpackUnsignedWords( KdasmU16 wordCount, KdasmU16 wordsOffset ) const
+    intptr_t UnpackWords( KdasmU16 wordCount, KdasmU16 wordsOffset ) const
     {
         const KdasmU16* words = &m_word + wordsOffset;
         intptr_t result = (intptr_t)*words;
@@ -172,12 +173,6 @@ private:
             result |= (intptr_t)*++words;
         }
         return result;
-    }
-
-    intptr_t UnpackSignedWords( KdasmU16 wordCount, KdasmU16 wordsOffset ) const
-    {
-        intptr_t signBit = (intptr_t)1 << (wordCount * 16 - 1);
-        return ( UnpackUnsignedWords( wordCount, wordsOffset ) ^ signBit ) - signBit;
     }
 
     KdasmU16 m_word;

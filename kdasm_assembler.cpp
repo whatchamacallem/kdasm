@@ -508,9 +508,9 @@ void KdasmAssemblerNodeBreadthFirstQueue::PopNext( bool addSubnodes )
     }
 }
 
-void KdasmAssemblerNodeBreadthFirstQueue::Append( KdasmAssemblerNode* n )
+void KdasmAssemblerNodeBreadthFirstQueue::Prepend( KdasmAssemblerNode* n )
 {
-    m_nodes.push_back( n );
+    m_nodes.push_front( n );
 }
 
 // ----------------------------------------------------------------------------
@@ -1294,7 +1294,7 @@ bool KdasmAssemblerPagePacker::ValidateNodeEncoding( KdasmAssemblerPageTempData*
             else
             {
                 KdasmAssertInternal( x.GetDistancePrefix() == distance0 );
-                KdasmAssertInternal( x.UnpackOffset() == ( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
+                KdasmAssertInternal( x.GetOffsetSigned() == ( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
             }
 
             KdasmAssertInternal( x.GetNomal() == normal );
@@ -1303,7 +1303,7 @@ bool KdasmAssemblerPagePacker::ValidateNodeEncoding( KdasmAssemblerPageTempData*
         {
             KdasmAssertInternal( x.GetNomal() == KdasmEncoding::NORMAL_OPCODE );
             KdasmAssertInternal( x.GetOpcode() == KdasmEncoding::OPCODE_LEAVES );
-            KdasmAssertInternal( x.UnpackOffset() == ( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
+            KdasmAssertInternal( x.GetOffsetSigned() == ( t->m_indices.m_extraDataIndex - t->m_indices.m_encodingWordIndex ) );
             KdasmAssertInternal( x.GetLength() == t->m_indices.m_extraDataSize );
         }
 
@@ -1313,7 +1313,7 @@ bool KdasmAssemblerPagePacker::ValidateNodeEncoding( KdasmAssemblerPageTempData*
 
             KdasmAssertInternal( j.GetNomal() == KdasmEncoding::NORMAL_OPCODE );
             KdasmAssertInternal( j.GetOpcode() == KdasmEncoding::OPCODE_JUMP );
-            KdasmAssertInternal( j.UnpackOffset() == ( t->m_indices.m_encodingWordIndex - t->m_indices.m_internalJumpIndex ) );
+            KdasmAssertInternal( j.GetOffsetSigned() == ( t->m_indices.m_encodingWordIndex - t->m_indices.m_internalJumpIndex ) );
             KdasmAssertInternal( j.GetTreeIndexStart() == t->m_indices.m_treeIndex );
         }
     }
@@ -1322,7 +1322,7 @@ bool KdasmAssemblerPagePacker::ValidateNodeEncoding( KdasmAssemblerPageTempData*
         intptr_t offset = CalculateNodeFarOffset( t );
         KdasmAssertInternal( x.GetNomal() == KdasmEncoding::NORMAL_OPCODE );
         KdasmAssertInternal( x.GetOpcode() == ( n->HasSubnodes() ? KdasmEncoding::OPCODE_JUMP_FAR : KdasmEncoding::OPCODE_LEAVES_FAR ) );
-        KdasmAssertInternal( x.UnpackFarOffset() == offset ); // May read extra data words.
+        KdasmAssertInternal( x.GetFarOffset() == offset ); // May read extra data words.
     }
 
     return true;
@@ -1439,7 +1439,8 @@ void KdasmAssembler::PackNextPage( void )
         {
             nodeToAdd->SetVirtualPage( virtualPagePrevioius );
 
-            m_globalQueue.Append( nodeToAdd );
+            // Prepend instead of append in order to reduce storage of far references.
+            m_globalQueue.Prepend( nodeToAdd );
             m_pageQueue.PopNext( false );
         }
     }
@@ -1655,7 +1656,7 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
 {
     TickActivity();
 
-	std::vector<KdasmAssemblerNode*>& pgNodes = pg->GetNodes();
+    std::vector<KdasmAssemblerNode*>& pgNodes = pg->GetNodes();
     size_t pgNodeCount = pgNodes.size();
 
     for( size_t i=0; i < pgNodeCount; ++i )
@@ -1714,7 +1715,7 @@ bool KdasmAssembler::TryBinPack( KdasmAssemblerVirtualPage* bin, KdasmAssemblerV
 
         failingPage->FindSuperpages( m_failingPageSuperpages );
 
-		failingPage->RemoveNode( superNode );
+        failingPage->RemoveNode( superNode );
         bin->InsertNode( superNode );
 
         packOk = m_pagePacker.Pack( bin, false, &pgNodes[0], pgNodeCount );
@@ -1877,24 +1878,24 @@ KdasmAssemblerNode* KdasmDisassembler::DisassembleEncoding( KdasmEncoding* encod
         {
             case KdasmEncoding::OPCODE_LEAVES:
             {
-                intptr_t offset = encoding->UnpackOffset();
+                intptr_t offset = encoding->GetOffset();
                 intptr_t leafCount = (intptr_t)encoding->GetLength();
                 return DisassembleLeaves( encoding + offset, leafCount, compareTo );
             }
             case KdasmEncoding::OPCODE_LEAVES_FAR:
             {
-                intptr_t offset = encoding->UnpackFarOffset();
+                intptr_t offset = encoding->GetFarOffset();
                 return DisassembleLeavesFar( encoding + offset, compareTo );
             }
             case KdasmEncoding::OPCODE_JUMP:
             {
-                intptr_t offset = encoding->UnpackOffset();
+                intptr_t offset = encoding->GetOffsetSigned();
                 intptr_t treeIndexStart = (intptr_t)encoding->GetTreeIndexStart();
                 return DisassembleEncoding( encoding + offset, treeIndexStart, compareTo );
             }
             case KdasmEncoding::OPCODE_JUMP_FAR:
             {
-                intptr_t offset = encoding->UnpackFarOffset();
+                intptr_t offset = encoding->GetFarOffset();
                 return DisassembleEncoding( encoding + offset, 0, compareTo );
             }
             default:
@@ -1916,7 +1917,7 @@ KdasmAssemblerNode* KdasmDisassembler::DisassembleEncoding( KdasmEncoding* encod
         else
         {
             distance[0] = encoding->GetDistancePrefix();
-            intptr_t offset = encoding->UnpackOffset();
+            intptr_t offset = encoding->GetOffset();
 
             for( int i=1; i < m_distanceLength; ++i )
             {
@@ -2090,7 +2091,7 @@ void KdasmDisassembler::CalculateStatsEncoding( KdasmEncoding* encoding, intptr_
             }
             case KdasmEncoding::OPCODE_LEAVES_FAR:
             {
-                intptr_t offset = encoding->UnpackFarOffset();
+                intptr_t offset = encoding->GetFarOffset();
                 KdasmEncoding* encodingOffset = encoding + offset;
 
                 bool isCacheMiss = IsCacheMiss( encoding, encodingOffset );
@@ -2112,7 +2113,7 @@ void KdasmDisassembler::CalculateStatsEncoding( KdasmEncoding* encoding, intptr_
             }
             case KdasmEncoding::OPCODE_JUMP:
             {
-                intptr_t offset = encoding->UnpackOffset();
+                intptr_t offset = encoding->GetOffsetSigned();
                 intptr_t treeIndexStart = (intptr_t)encoding->GetTreeIndexStart();
 
                 ++stats.m_jumpNodeCount;
@@ -2122,7 +2123,7 @@ void KdasmDisassembler::CalculateStatsEncoding( KdasmEncoding* encoding, intptr_
             }
             case KdasmEncoding::OPCODE_JUMP_FAR:
             {
-                intptr_t offset = encoding->UnpackFarOffset();
+                intptr_t offset = encoding->GetFarOffset();
                 KdasmEncoding* encodingOffset = encoding + offset;
 
                 bool isCacheMiss = IsCacheMiss( encoding, encodingOffset );

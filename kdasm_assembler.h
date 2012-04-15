@@ -162,7 +162,7 @@ public:
     void Init( KdasmAssemblerNode* root, KdasmAssemblerPageAllocator& pgAlloc );
     KdasmAssemblerNode* GetNext( KdasmAssemblerPageAllocator& pgAlloc );
     void PopNext( bool addSubnodes );
-    void Append( KdasmAssemblerNode* n );
+    void Prepend( KdasmAssemblerNode* n );
     bool Empty( void )                      { return m_nodes.empty(); }
     void Clear( void )                      { m_nodes.clear(); }
 

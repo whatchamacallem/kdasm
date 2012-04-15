@@ -22,11 +22,18 @@ public:
     void Visualize( KdasmEncoding* encodingRoot, FILE* graph );
 
 private:
+    struct SubpageRecord
+    {
+        SubpageRecord( intptr_t index, intptr_t linkCost ) : m_index( index ), m_linkCost( linkCost ) { }
+        intptr_t m_index;
+        int      m_linkCost;
+    };
+    
     struct PageRecord
     {
-        PageRecord( void )    { m_nodeCount = 0; }
-        intptr_t              m_nodeCount;
-        std::vector<intptr_t> m_subpages;
+        PageRecord( void ) { m_nodeCount = 0; }
+        intptr_t                   m_nodeCount;
+        std::vector<SubpageRecord> m_subpages;
     };
     
     void VisualizeEncoding( KdasmEncoding* encoding, intptr_t treeIndex );
@@ -34,7 +41,7 @@ private:
     void VisualizeLeaves( KdasmEncoding* encoding, intptr_t leafCount );
 
     void Node( KdasmEncoding* node );
-    void FarNode( KdasmEncoding* node, KdasmEncoding* subnode );
+    void FarNode( KdasmEncoding* node, KdasmEncoding* subnode, int linkCost );
 
     intptr_t                       m_pageAddressMask;
     KdasmEncoding*                 m_encodingRoot;

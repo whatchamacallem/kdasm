@@ -42,12 +42,19 @@ void KdasmVisualizer::Visualize( KdasmEncoding* encodingRoot, FILE* graph )
         fprintf( graph, "p%d [label=\"%d\"];\n", i->first, i->second.m_nodeCount );
     }
 
+    std::vector<SubpageRecord>::iterator j;
     for( i=m_pageRecords.begin(); i != m_pageRecords.end(); ++i )
     {
-        std::vector<intptr_t>::iterator j;
         for( j=i->second.m_subpages.begin(); j != i->second.m_subpages.end(); ++j )
         {
-            fprintf( graph, "p%d -> p%d;\n", i->first, *j );
+            if( j->m_linkCost != 0 )
+            {
+                fprintf( graph, "p%d -> p%d [ label = \"%d\" ];\n", i->first, j->m_index, j->m_linkCost );
+            }
+            else
+            {
+                fprintf( graph, "p%d -> p%d;\n", i->first, j->m_index );
+            }
         }
     }
 
@@ -70,16 +77,16 @@ void KdasmVisualizer::VisualizeEncoding( KdasmEncoding* encoding, intptr_t treeI
             }
             case KdasmEncoding::OPCODE_LEAVES_FAR:
             {
-                intptr_t offset = encoding->UnpackFarOffset();
+                intptr_t offset = encoding->GetFarOffset();
                 KdasmEncoding* encodingOffset = encoding + offset;
 
-                FarNode( encoding, encodingOffset );
+                FarNode( encoding, encodingOffset, encoding->GetIsImmediateOffset() ? 0 : encoding->GetFarWordsCount() );
                 VisualizeLeavesFar( encodingOffset );
                 return;
             }
             case KdasmEncoding::OPCODE_JUMP:
             {
-                intptr_t offset = encoding->UnpackOffset();
+                intptr_t offset = encoding->GetOffsetSigned();
                 intptr_t treeIndexStart = (intptr_t)encoding->GetTreeIndexStart();
 
                 VisualizeEncoding( encoding + offset, treeIndexStart );
@@ -87,10 +94,10 @@ void KdasmVisualizer::VisualizeEncoding( KdasmEncoding* encoding, intptr_t treeI
             }
             case KdasmEncoding::OPCODE_JUMP_FAR:
             {
-                intptr_t offset = encoding->UnpackFarOffset();
+                intptr_t offset = encoding->GetFarOffset();
                 KdasmEncoding* encodingOffset = encoding + offset;
 
-                FarNode( encoding, encodingOffset );
+                FarNode( encoding, encodingOffset, encoding->GetIsImmediateOffset() ? 0 : encoding->GetFarWordsCount() );
                 VisualizeEncoding( encodingOffset, 0 );
                 return;
             }
@@ -124,18 +131,13 @@ void KdasmVisualizer::Node( KdasmEncoding* node )
     m_pageRecords[nodePage].m_nodeCount += 1;
 }
 
-void KdasmVisualizer::FarNode( KdasmEncoding* node, KdasmEncoding* subnode )
+void KdasmVisualizer::FarNode( KdasmEncoding* node, KdasmEncoding* subnode, int linkCost )
 {
     intptr_t nodePage = (intptr_t)(node - m_encodingRoot) & m_pageAddressMask;
     intptr_t subnodePage = (intptr_t)(subnode - m_encodingRoot) & m_pageAddressMask;
     if( nodePage != subnodePage )
     {
-        std::vector<intptr_t>& subpages = m_pageRecords[nodePage].m_subpages;
-        std::vector<intptr_t>::iterator i = std::find( subpages.begin(), subpages.end(), subnodePage );
-        if( i == subpages.end() )
-        {
-            subpages.push_back( subnodePage );
-        }
+        m_pageRecords[nodePage].m_subpages.push_back( SubpageRecord( subnodePage, linkCost ) );
     }
 }
 
